@@ -50,7 +50,7 @@ const WORDS = {
 };
 const ICONS = { outfit: 'shirt', inventory: 'bag-shopping', cycle: 'star', state: 'feather-pointed', location: 'location-dot', date: 'calendar-days', time: 'clock', weather: 'cloud-sun' };
 let settings = defaults(), state, activeKey = null, profile = {}, settingsOpen = false, editingPerson = '@user';
-let panel, body, title, launcher, notice, settingsButton, lastShared = '', pendingRefresh;
+let panel, body, title, launcher, notice, settingsButton, pickerHost, lastShared = '', pendingRefresh;
 const context = () => window.SillyTavern?.getContext?.() || null;
 const t = key => WORDS[settings.language]?.[key] ?? WORDS.en[key] ?? key;
 const element = (tag, className = '', text) => {
@@ -131,14 +131,14 @@ function avatar(name, large = false) {
             initial.hidden = true;
             if (large) {
                 wrap.classList.add('cs-has-image');
-                wrap.closest('.cs-layout')?.classList.toggle('cs-layout-tall', image.naturalHeight > image.naturalWidth * 1.4);
+                wrap.closest('.cs-portrait')?.style.setProperty('--cs-portrait-ratio', String(image.naturalWidth / image.naturalHeight));
             }
         });
         image.addEventListener('error', () => {
             if (++index < sources.length) image.src = sources[index];
             else {
                 image.remove(); initial.hidden = false; wrap.classList.remove('cs-has-image');
-                if (large) wrap.closest('.cs-layout')?.classList.remove('cs-layout-tall');
+                if (large) wrap.closest('.cs-portrait')?.style.removeProperty('--cs-portrait-ratio');
             }
         });
         image.src = sources[0]; wrap.append(image);
@@ -150,16 +150,38 @@ function render() {
     settingsButton.title = t(settingsOpen ? 'back' : 'settings');
     settingsButton.setAttribute('aria-label', settingsButton.title);
     body.replaceChildren();
+    pickerHost.replaceChildren();
     if (!activeKey) { body.append(element('p', 'cs-empty', t('noChat'))); return; }
+    renderPicker();
     if (settingsOpen) { renderSettings(); return; }
-    const switcher = element('div', 'cs-switcher');
+    renderCharacter();
+}
+function renderPicker() {
+    const trigger = button(personLabel(settings.selected), null, () => {
+        const open = menu.hidden;
+        menu.hidden = !open; trigger.setAttribute('aria-expanded', String(open));
+        if (open) {
+            menu.showPopover?.();
+            const box = trigger.getBoundingClientRect();
+            const width = Math.min(280, innerWidth - 24);
+            menu.style.width = `${width}px`;
+            menu.style.left = `${Math.max(12, Math.min(box.right - width, innerWidth - width - 12))}px`;
+            menu.style.top = `${Math.max(12, Math.min(box.bottom + 7, innerHeight - menu.offsetHeight - 12))}px`;
+            menu.querySelector('.cs-choice[aria-pressed="true"]')?.focus();
+        } else menu.hidePopover?.();
+    }, 'cs-picker-trigger');
+    trigger.replaceChildren(avatar(settings.selected), element('span', '', personLabel(settings.selected)), icon('chevron-down'));
+    trigger.setAttribute('aria-haspopup', 'dialog'); trigger.setAttribute('aria-expanded', 'false');
+    const menu = element('div', 'cs-picker-menu'); menu.hidden = true;
+    if ('showPopover' in menu) menu.setAttribute('popover', 'manual');
+    menu.setAttribute('role', 'dialog'); menu.setAttribute('aria-label', t('person'));
     const tabs = element('div', 'cs-filter');
     for (const filter of ['scene', 'all']) {
         const tab = button(t(filter), null, () => {
             settings.filter = filter;
             const selected = state.characters[nameKey(settings.selected)];
             if (filter === 'scene' && (!selected || selected.presence === 'absent')) settings.selected = '@user';
-            persist(); render();
+            persist(); render(); pickerHost.querySelector('.cs-picker-trigger')?.click();
         }, settings.filter === filter ? 'cs-active' : '');
         tab.setAttribute('aria-pressed', String(settings.filter === filter)); tabs.append(tab);
     }
@@ -170,7 +192,9 @@ function render() {
         choice.replaceChildren(avatar(name), element('span', '', personLabel(name)));
         choice.setAttribute('aria-pressed', String(settings.selected === name)); choices.append(choice);
     }
-    switcher.append(tabs, choices); body.append(switcher);
+    menu.append(tabs, choices); pickerHost.append(trigger, menu);
+}
+function renderCharacter() {
     const selected = settings.selected;
     const isUser = selected === '@user';
     const character = isUser ? state.user : state.characters[nameKey(selected)];
@@ -189,7 +213,8 @@ function render() {
     const details = element('div', 'cs-details');
     const identity = element('div', 'cs-identity');
     const heading = element('div', 'cs-person-heading');
-    heading.append(element('h2', '', personLabel(selected)));
+    const ornament = element('span', 'cs-name-decoration'); ornament.setAttribute('aria-hidden', 'true');
+    heading.append(element('h2', '', personLabel(selected)), ornament);
     identity.append(heading);
     if (!isUser) identity.append(element('div', 'cs-presence', t(character?.presence || 'unknown')));
     if (!isUser && fields.mood?.value) {
@@ -212,11 +237,7 @@ function render() {
     }
     if (!Object.keys(fields).length && !Object.keys(state.scene).length) details.append(element('p', 'cs-empty', t('noStats')));
     grid.append(portrait, details);
-    if (continuation.childElementCount) {
-        const divider = element('div', 'cs-section-divider'); divider.setAttribute('aria-hidden', 'true');
-        for (let i = 0; i < 3; i++) divider.append(element('span'));
-        continuation.prepend(divider); grid.append(continuation);
-    }
+    if (continuation.childElementCount) grid.append(continuation);
     body.append(grid);
 }
 function sourceTitle(node, field) { if (field) node.title = `${t('source')} #${field.source}`; }
@@ -406,11 +427,21 @@ function createUI() {
     const refreshButton = button(t('refresh'), 'rotate-right', () => { notify(''); refresh(); });
     settingsButton = button(t('settings'), 'sliders', () => { settingsOpen = !settingsOpen; notify(''); refresh(); });
     const close = button(t('close'), 'xmark', () => setOpen(false), 'cs-close');
-    controls.append(refreshButton, settingsButton, close); header.append(titleWrap, controls);
+    pickerHost = element('div', 'cs-picker');
+    controls.append(refreshButton, settingsButton, close); header.append(titleWrap, pickerHost, controls);
     notice = element('div', 'cs-notice'); notice.hidden = true; notice.setAttribute('role', 'status');
     body = element('div', 'cs-body'); panel.append(header, notice, body);
     launcher = button(t('title'), 'id-card', () => setOpen(panel.style.display === 'none')); launcher.id = 'cs-launcher';
     document.body.append(panel, launcher);
+    const closePicker = () => {
+        const menu = pickerHost.querySelector('.cs-picker-menu');
+        if (menu) { menu.hidden = true; menu.hidePopover?.(); }
+        pickerHost.querySelector('.cs-picker-trigger')?.setAttribute('aria-expanded', 'false');
+    };
+    document.addEventListener('pointerdown', event => { if (!pickerHost.contains(event.target)) closePicker(); });
+    pickerHost.addEventListener('keydown', event => {
+        if (event.key === 'Escape') { closePicker(); pickerHost.querySelector('.cs-picker-trigger')?.focus(); }
+    });
     let drag;
     header.addEventListener('pointerdown', event => {
         if (isRoleplayDocked(panel) || innerWidth <= 600 || event.target.closest('button') || event.button !== 0) return;

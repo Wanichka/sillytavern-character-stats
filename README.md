@@ -4,7 +4,7 @@ A theme-aware SillyTavern extension for viewing the user's and NPCs' current sta
 
 ## Features
 
-- Switch between the user and NPCs, with **In scene** and **All characters** filters.
+- Switch between the user and NPCs using a compact header picker. Its dropdown contains **In scene** and **All characters** filters.
 - Keep a persistent character roster for each chat, including characters who have left the scene.
 - Show the user's outfit, inventory, cycle, and location.
 - Show NPC outfits, mood subtitles, and current state from `char_notes`.
@@ -14,9 +14,9 @@ A theme-aware SillyTavern extension for viewing the user's and NPCs' current sta
 - Reuse Character Thoughts avatars, aliases, and display names, with optional per-chat overrides.
 - Configure visible sections in settings; the main view has no section collapse buttons.
 - Follow SillyTavern's current colors and font, including light themes.
-- Use a Times New Roman name heading with a clean underline, and an olive-accented cycle section.
-- Adapt the layout to the portrait: square images use a compact profile row with full-width stats below; tall images retain the portrait-and-stats columns.
-- Keep date, time, and weather typography consistent, with geometric frame corners and dividers.
+- Use a Times New Roman name heading with one clean underline and a theme-colored botanical ornament.
+- Keep the same profile layout for every portrait shape, with full-width stats below. Tall portraits are reduced proportionally to a 300-pixel image height without cropping.
+- Use matching section frames and olive accents on cycle values. Date, time, and weather share one compact strip.
 - Russian and English interface.
 - Export and import per-chat settings and portrait backups.
 
