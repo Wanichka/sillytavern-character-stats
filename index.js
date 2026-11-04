@@ -127,10 +127,10 @@ function avatar(name, large = false) {
         const image = element('img');
         image.alt = personLabel(name); image.draggable = false;
         let index = 0;
-        image.addEventListener('load', () => { initial.hidden = true; });
+        image.addEventListener('load', () => { initial.hidden = true; if (large) wrap.classList.add('cs-has-image'); });
         image.addEventListener('error', () => {
             if (++index < sources.length) image.src = sources[index];
-            else { image.remove(); initial.hidden = false; }
+            else { image.remove(); initial.hidden = false; wrap.classList.remove('cs-has-image'); }
         });
         image.src = sources[0]; wrap.append(image);
     } else if (large) wrap.append(element('p', 'cs-portrait-hint', t('portraitHint')));
@@ -175,8 +175,9 @@ function render() {
     portrait.append(portraitActions);
     const details = element('div', 'cs-details');
     const heading = element('div', 'cs-person-heading');
-    heading.append(element('h2', '', personLabel(selected)), element('span', 'cs-ornament', '❧'));
-    details.append(heading, element('div', 'cs-presence', t(isUser ? 'userBadge' : character?.presence || 'unknown')));
+    heading.append(element('h2', '', personLabel(selected)));
+    details.append(heading);
+    if (!isUser) details.append(element('div', 'cs-presence', t(character?.presence || 'unknown')));
     if (!isUser && fields.mood?.value) {
         const mood = element('div', 'cs-mood', fields.mood.value); sourceTitle(mood, fields.mood); details.append(mood);
     }
@@ -187,7 +188,6 @@ function render() {
     }
     if (Object.values(state.scene).length && (isUser || ['date', 'time', 'weather'].some(field => settings.visible[field]))) {
         const scene = element('section', 'cs-scene');
-        scene.append(element('div', 'cs-scene-label', t('currentScene')));
         if (isUser && settings.visible.location) scene.append(card('location', state.scene.location));
         const row = element('div', 'cs-scene-row');
         for (const field of ['date', 'time', 'weather']) if (settings.visible[field]) row.append(card(field, state.scene[field], true));
@@ -212,7 +212,11 @@ function card(field, data, compact = false) {
             track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', '100'); track.setAttribute('aria-valuenow', String(Math.round(cycle.progress)));
             const fill = element('div'); fill.style.width = `${cycle.progress}%`; track.append(fill);
             const bottom = element('div', 'cs-cycle-bottom');
-            bottom.append(element('span', '', `${t('pregnancy')}: ${cycle.pregnancy}`), element('span', '', `${t('risk')}: ${cycle.risk}`));
+            for (const [label, value] of [['pregnancy', cycle.pregnancy], ['risk', cycle.risk]]) {
+                const status = element('span');
+                status.append(document.createTextNode(`${t(label)}: `), element('strong', 'cs-cycle-status', value));
+                bottom.append(status);
+            }
             node.append(top, track, bottom); return node;
         }
     }

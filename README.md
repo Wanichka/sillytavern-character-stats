@@ -10,10 +10,11 @@ A theme-aware SillyTavern extension for viewing the user's and NPCs' current sta
 - Show NPC outfits, mood subtitles, and current state from `char_notes`.
 - Keep the scene's date, time, and weather visible when switching characters.
 - Display outfit descriptions as text, without requiring fixed clothing categories.
-- Upload full portraits without cropping. Images fit inside the decorative frame.
+- Upload portraits without cropping. The frame follows the image's proportions, including square avatars.
 - Reuse Character Thoughts avatars, aliases, and display names, with optional per-chat overrides.
 - Configure visible sections in settings; the main view has no section collapse buttons.
 - Follow SillyTavern's current colors and font, including light themes.
+- Use a Times New Roman name heading with a clean underline, and an olive-accented cycle section.
 - Russian and English interface.
 - Export and import per-chat settings and portrait backups.
 
