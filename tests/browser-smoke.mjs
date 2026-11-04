@@ -78,7 +78,9 @@ try {
     assert.equal(await evaluate(`!!document.querySelector('.cs-ornament')||!!document.querySelector('.cs-scene-label')`), false);
     assert.ok((await evaluate(`getComputedStyle(document.querySelector('.cs-person-heading h2')).fontFamily`)).includes('Times New Roman'));
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.cs-person-heading')).borderBottomStyle`), 'solid');
-    assert.notEqual(await evaluate(`getComputedStyle(document.querySelector('.cs-cycle')).backgroundColor`), await evaluate(`getComputedStyle(document.querySelector('.cs-outfit')).backgroundColor`));
+    assert.notEqual(await evaluate(`getComputedStyle(document.querySelector('.cs-cycle')).background`), await evaluate(`getComputedStyle(document.querySelector('.cs-outfit')).background`));
+    assert.equal(await evaluate(`new Set(['date','time','weather'].map(field=>{const style=getComputedStyle(document.querySelector('.cs-'+field+' .cs-value'));return [style.fontFamily,style.fontSize,style.fontWeight,style.color].join('|')})).size`), 1);
+    assert.ok(await evaluate(`Math.abs(document.querySelector('.cs-continuation').getBoundingClientRect().width-document.querySelector('.cs-layout').getBoundingClientRect().width)<2`), 'Square/placeholder layout uses the full width below the portrait');
     // Block values are rendered as text, never as executable HTML.
     await evaluate(`ctx.chat[0].mes+='<user_stats><inventory>&lt;img src=x onerror=alert(1)&gt;</inventory></user_stats>';emit('MESSAGE_EDITED')`);
     await waitFor(`document.querySelector('.cs-inventory .cs-value')?.textContent.includes('onerror')`);
@@ -146,6 +148,7 @@ try {
     await evaluate(`var tall=document.createElement('canvas');tall.width=10;tall.height=30;tall.getContext('2d').fillRect(0,0,10,30);var shared=JSON.parse(localStorage.getItem('ct_profiles_v1'));shared.p.uploads['Ло']=tall.toDataURL();localStorage.setItem('ct_profiles_v1',JSON.stringify(shared));document.querySelector('[aria-label="Обновить данные"]').click()`);
     await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalHeight===30`);
     assert.ok(await evaluate(`Math.abs(document.querySelector('.cs-portrait-image').clientHeight/document.querySelector('.cs-portrait-image').clientWidth-3)<.03`), 'Tall portrait keeps its native aspect ratio');
+    assert.equal(await evaluate(`document.querySelector('.cs-layout').classList.contains('cs-layout-tall')`), true);
     await evaluate(`document.querySelector('.cs-choice').click()`);
     // Changing a swipe removes old scene fields and updates the selected outfit.
     await evaluate(`ctx.chat[0].mes='<user_stats><outfit>Новое платье</outfit></user_stats>';emit('MESSAGE_SWIPED')`);

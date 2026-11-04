@@ -15,6 +15,8 @@ A theme-aware SillyTavern extension for viewing the user's and NPCs' current sta
 - Configure visible sections in settings; the main view has no section collapse buttons.
 - Follow SillyTavern's current colors and font, including light themes.
 - Use a Times New Roman name heading with a clean underline, and an olive-accented cycle section.
+- Adapt the layout to the portrait: square images use a compact profile row with full-width stats below; tall images retain the portrait-and-stats columns.
+- Keep date, time, and weather typography consistent, with geometric frame corners and dividers.
 - Russian and English interface.
 - Export and import per-chat settings and portrait backups.
 

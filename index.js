@@ -127,10 +127,19 @@ function avatar(name, large = false) {
         const image = element('img');
         image.alt = personLabel(name); image.draggable = false;
         let index = 0;
-        image.addEventListener('load', () => { initial.hidden = true; if (large) wrap.classList.add('cs-has-image'); });
+        image.addEventListener('load', () => {
+            initial.hidden = true;
+            if (large) {
+                wrap.classList.add('cs-has-image');
+                wrap.closest('.cs-layout')?.classList.toggle('cs-layout-tall', image.naturalHeight > image.naturalWidth * 1.4);
+            }
+        });
         image.addEventListener('error', () => {
             if (++index < sources.length) image.src = sources[index];
-            else { image.remove(); initial.hidden = false; wrap.classList.remove('cs-has-image'); }
+            else {
+                image.remove(); initial.hidden = false; wrap.classList.remove('cs-has-image');
+                if (large) wrap.closest('.cs-layout')?.classList.remove('cs-layout-tall');
+            }
         });
         image.src = sources[0]; wrap.append(image);
     } else if (large) wrap.append(element('p', 'cs-portrait-hint', t('portraitHint')));
@@ -169,22 +178,29 @@ function render() {
     const grid = element('div', 'cs-layout');
     const portrait = element('div', 'cs-portrait');
     portrait.append(avatar(selected, true));
+    for (const corner of ['tl', 'tr', 'bl', 'br']) {
+        const ornament = element('span', `cs-frame-corner cs-corner-${corner}`);
+        ornament.setAttribute('aria-hidden', 'true'); portrait.append(ornament);
+    }
     const portraitActions = element('div', 'cs-portrait-actions');
     portraitActions.append(button(t('portrait'), 'image', () => uploadPortrait(selected)));
     if (settings.people[selected]?.image) portraitActions.append(button(t('clearPortrait'), 'eraser', () => { settings.people[selected].image = ''; persist(); render(); }));
     portrait.append(portraitActions);
     const details = element('div', 'cs-details');
+    const identity = element('div', 'cs-identity');
     const heading = element('div', 'cs-person-heading');
     heading.append(element('h2', '', personLabel(selected)));
-    details.append(heading);
-    if (!isUser) details.append(element('div', 'cs-presence', t(character?.presence || 'unknown')));
+    identity.append(heading);
+    if (!isUser) identity.append(element('div', 'cs-presence', t(character?.presence || 'unknown')));
     if (!isUser && fields.mood?.value) {
-        const mood = element('div', 'cs-mood', fields.mood.value); sourceTitle(mood, fields.mood); details.append(mood);
+        const mood = element('div', 'cs-mood', fields.mood.value); sourceTitle(mood, fields.mood); identity.append(mood);
     }
+    details.append(identity);
+    const continuation = element('div', 'cs-continuation');
     for (const field of ['outfit', 'inventory', 'cycle', 'state']) {
         if (!settings.visible[field] || (!isUser && ['inventory', 'cycle'].includes(field)) || (isUser && field === 'state')) continue;
         if (!isUser && !fields[field]) continue;
-        details.append(card(field, fields[field]));
+        (['cycle', 'state'].includes(field) ? continuation : details).append(card(field, fields[field]));
     }
     if (Object.values(state.scene).length && (isUser || ['date', 'time', 'weather'].some(field => settings.visible[field]))) {
         const scene = element('section', 'cs-scene');
@@ -192,10 +208,16 @@ function render() {
         const row = element('div', 'cs-scene-row');
         for (const field of ['date', 'time', 'weather']) if (settings.visible[field]) row.append(card(field, state.scene[field], true));
         if (row.childElementCount) scene.append(row);
-        details.append(scene);
+        if (scene.childElementCount) continuation.append(scene);
     }
     if (!Object.keys(fields).length && !Object.keys(state.scene).length) details.append(element('p', 'cs-empty', t('noStats')));
-    grid.append(portrait, details); body.append(grid);
+    grid.append(portrait, details);
+    if (continuation.childElementCount) {
+        const divider = element('div', 'cs-section-divider'); divider.setAttribute('aria-hidden', 'true');
+        for (let i = 0; i < 3; i++) divider.append(element('span'));
+        continuation.prepend(divider); grid.append(continuation);
+    }
+    body.append(grid);
 }
 function sourceTitle(node, field) { if (field) node.title = `${t('source')} #${field.source}`; }
 function card(field, data, compact = false) {
