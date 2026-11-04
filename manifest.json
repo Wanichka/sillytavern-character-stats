@@ -1,0 +1,12 @@
+{
+  "display_name": "Character Stats",
+  "loading_order": 15,
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "style.css",
+  "author": "Wani",
+  "version": "1.0.0",
+  "homePage": "https://github.com/Wanichka/sillytavern-character-stats",
+  "auto_update": false
+}
