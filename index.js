@@ -6,7 +6,7 @@ import { registerRoleplayPanel, isRoleplayDocked } from './roleplay-tools-adapte
 const WORDS = {
     ru: {
         title: 'Инфоблок персонажей', settings: 'Настройки', refresh: 'Обновить данные', close: 'Закрыть', back: 'Назад',
-        user: 'Юзер', scene: 'В сцене', all: 'Все персонажи', outfit: 'Одежда', inventory: 'Инвентарь', cycle: 'Cycle Status',
+        user: 'Юзер', scene: 'В сцене', all: 'Все персонажи', outfit: 'Одежда', inventory: 'Инвентарь', cycle: 'Статус цикла',
         state: 'Текущее состояние', location: 'Локация', date: 'Дата', time: 'Время', weather: 'Погода',
         currentScene: 'Текущая сцена', empty: 'Нет данных', noChat: 'Открой чат, чтобы посмотреть данные персонажей.',
         noStats: 'В сообщениях пока нет инфоблоков. Панель заполнится после ответа с нужными тегами.',
@@ -48,7 +48,7 @@ const WORDS = {
         inherited: 'From Character Thoughts:', notes: 'Settings are stored in this browser for this chat. Nothing is sent to the model.', noName: 'A name is required',
     },
 };
-const ICONS = { outfit: 'shirt', inventory: 'bag-shopping', cycle: 'star', state: 'feather-pointed', location: 'location-dot', date: 'calendar-days', time: 'clock', weather: 'cloud-sun' };
+const ICONS = { outfit: 'shirt', inventory: 'bag-shopping', cycle: 'arrows-rotate', state: 'feather-pointed', location: 'location-dot', date: 'calendar-days', time: 'clock', weather: 'cloud-sun' };
 let settings = defaults(), state, activeKey = null, profile = {}, settingsOpen = false, editingPerson = '@user';
 let panel, body, title, launcher, notice, settingsButton, pickerHost, lastShared = '', pendingRefresh;
 const context = () => window.SillyTavern?.getContext?.() || null;
@@ -206,26 +206,24 @@ function renderCharacter() {
         const ornament = element('span', `cs-frame-corner cs-corner-${corner}`);
         ornament.setAttribute('aria-hidden', 'true'); portrait.append(ornament);
     }
-    const portraitActions = element('div', 'cs-portrait-actions');
-    portraitActions.append(button(t('portrait'), 'image', () => uploadPortrait(selected)));
-    if (settings.people[selected]?.image) portraitActions.append(button(t('clearPortrait'), 'eraser', () => { settings.people[selected].image = ''; persist(); render(); }));
-    portrait.append(portraitActions);
+    portrait.append(button(t('portrait'), 'image', () => uploadPortrait(selected), 'cs-portrait-edit'));
     const details = element('div', 'cs-details');
     const identity = element('div', 'cs-identity');
     const heading = element('div', 'cs-person-heading');
-    const ornament = element('span', 'cs-name-decoration'); ornament.setAttribute('aria-hidden', 'true');
-    heading.append(element('h2', '', personLabel(selected)), ornament);
+    heading.append(element('h2', '', personLabel(selected)));
     identity.append(heading);
-    if (!isUser) identity.append(element('div', 'cs-presence', t(character?.presence || 'unknown')));
+    const status = element('div', 'cs-status-line');
+    if (!isUser) status.append(element('span', 'cs-presence', t(character?.presence || 'unknown')));
     if (!isUser && fields.mood?.value) {
-        const mood = element('div', 'cs-mood', fields.mood.value); sourceTitle(mood, fields.mood); identity.append(mood);
+        const mood = element('span', 'cs-mood', fields.mood.value); sourceTitle(mood, fields.mood); status.append(mood);
     }
+    if (status.childElementCount) identity.append(status);
     details.append(identity);
     const continuation = element('div', 'cs-continuation');
     for (const field of ['outfit', 'inventory', 'cycle', 'state']) {
         if (!settings.visible[field] || (!isUser && ['inventory', 'cycle'].includes(field)) || (isUser && field === 'state')) continue;
         if (!isUser && !fields[field]) continue;
-        (['cycle', 'state'].includes(field) ? continuation : details).append(card(field, fields[field]));
+        (field === 'cycle' ? continuation : details).append(card(field, fields[field]));
     }
     if (Object.values(state.scene).length && (isUser || ['date', 'time', 'weather'].some(field => settings.visible[field]))) {
         const scene = element('section', 'cs-scene');
@@ -243,7 +241,9 @@ function renderCharacter() {
 function sourceTitle(node, field) { if (field) node.title = `${t('source')} #${field.source}`; }
 function card(field, data, compact = false) {
     const node = element('section', `cs-card cs-${field} ${compact ? 'cs-compact' : ''}`);
-    const label = element('h3'); label.append(icon(ICONS[field]), document.createTextNode(t(field)));
+    const label = element('h3'); label.append(icon(ICONS[field]));
+    if (compact) label.append(element('span', 'cs-sr-only', t(field)));
+    else label.append(document.createTextNode(t(field)));
     node.append(label); sourceTitle(node, data);
     if (field === 'cycle' && data?.value) {
         const cycle = cycleDetails(data.value);
@@ -257,7 +257,8 @@ function card(field, data, compact = false) {
             const bottom = element('div', 'cs-cycle-bottom');
             for (const [label, value] of [['pregnancy', cycle.pregnancy], ['risk', cycle.risk]]) {
                 const status = element('span');
-                status.append(document.createTextNode(`${t(label)}: `), element('strong', 'cs-cycle-status', value));
+                const translated = settings.language === 'ru' ? ({No:'Нет',Yes:'Да',Pending:'Ожидается',None:'Нет'}[value.trim()] || value) : value;
+                status.append(document.createTextNode(`${t(label)}: `), element('strong', 'cs-cycle-status', translated));
                 bottom.append(status);
             }
             node.append(top, track, bottom); return node;
@@ -422,7 +423,7 @@ function createUI() {
     panel.setAttribute('aria-label', 'Character Stats');
     const header = element('header', 'cs-header');
     title = element('strong', 'cs-title', t('title'));
-    const titleWrap = element('div', 'cs-title-wrap'); titleWrap.append(icon('star'), title);
+    const titleWrap = element('div', 'cs-title-wrap'); titleWrap.append(icon('id-card'), title);
     const controls = element('div', 'cs-controls');
     const refreshButton = button(t('refresh'), 'rotate-right', () => { notify(''); refresh(); });
     settingsButton = button(t('settings'), 'sliders', () => { settingsOpen = !settingsOpen; notify(''); refresh(); });

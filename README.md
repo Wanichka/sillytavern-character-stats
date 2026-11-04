@@ -13,10 +13,12 @@ A theme-aware SillyTavern extension for viewing the user's and NPCs' current sta
 - Upload portraits without cropping. The frame follows the image's proportions, including square avatars.
 - Reuse Character Thoughts avatars, aliases, and display names, with optional per-chat overrides.
 - Configure visible sections in settings; the main view has no section collapse buttons.
-- Follow SillyTavern's current colors and font, including light themes.
-- Use a Times New Roman name heading with one clean underline and a theme-colored botanical ornament.
-- Keep the same profile layout for every portrait shape, with full-width stats below. Tall portraits are reduced proportionally to a 300-pixel image height without cropping.
-- Use matching section frames and olive accents on cycle values. Date, time, and weather share one compact strip.
+- Follow SillyTavern's current colors, including light themes, with one consistent Times New Roman font family.
+- Use a simple underlined name heading and theme-colored filigree corners on the portrait frame.
+- Let sections flow beside and below the portrait without a fixed two-column row. Tall portraits are reduced proportionally to a 300-pixel image height without cropping.
+- Replace portraits with a small image overlay; remove local portraits in settings. No button panel is added below the image.
+- Match the cycle and location sections while keeping outfit and inventory cards distinct. Date, time, and weather appear as compact icon-and-value entries below the content.
+- Localize the cycle heading and standard pregnancy/risk values in the Russian interface.
 - Russian and English interface.
 - Export and import per-chat settings and portrait backups.
 

@@ -29,7 +29,7 @@ const server = http.createServer(async (req, res) => {
         }
         let file;
         if (pathname === '/host.js' || pathname === '/host.css') file = path.join(out, pathname.slice(1));
-        else if (pathname === '/scripts/extensions/third-party/sillytavern-character-stats/assets/botanical.svg') file = path.join(root,'assets','botanical.svg');
+        else if (pathname === '/scripts/extensions/third-party/sillytavern-character-stats/assets/filigree.svg') file = path.join(root,'assets','filigree.svg');
         else if (pathname.startsWith('/scripts/extensions/third-party/sillytavern-character-stats/')) file = path.join(root, path.basename(pathname));
         else { res.writeHead(404); res.end(); return; }
         res.setHeader('Content-Type', file.endsWith('.css') ? 'text/css' : file.endsWith('.svg') ? 'image/svg+xml' : 'text/javascript'); res.end(await readFile(file));
@@ -82,7 +82,10 @@ try {
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.cs-cycle')).background`), await evaluate(`getComputedStyle(document.querySelector('.cs-location')).background`));
     assert.notEqual(await evaluate(`getComputedStyle(document.querySelector('.cs-cycle-phase')).color`), await evaluate(`getComputedStyle(document.querySelector('.cs-cycle-top')).color`));
     assert.equal(await evaluate(`new Set(['date','time','weather'].map(field=>{const style=getComputedStyle(document.querySelector('.cs-'+field+' .cs-value'));return [style.fontFamily,style.fontSize,style.fontWeight,style.color].join('|')})).size`), 1);
-    assert.ok(await evaluate(`Math.abs(document.querySelector('.cs-continuation').getBoundingClientRect().width-document.querySelector('.cs-layout').getBoundingClientRect().width)<2`), 'Square/placeholder layout uses the full width below the portrait');
+    assert.equal(await evaluate(`document.querySelector('.cs-cycle h3').textContent`), 'Статус цикла');
+    assert.equal(await evaluate(`new Set([...document.querySelectorAll('.cs-person-heading h2,.cs-card h3,.cs-value,.cs-picker-trigger')].map(node=>getComputedStyle(node).fontFamily)).size`), 1);
+    assert.equal(await evaluate(`!!document.querySelector('.cs-portrait-actions')`), false);
+    assert.equal(await evaluate(`document.querySelector('.cs-title-wrap i').className===document.querySelector('.cs-cycle h3 i').className`), false);
     assert.equal(await evaluate(`!!document.querySelector('.cs-switcher')`), false);
     await evaluate(`document.querySelector('.cs-picker-trigger').click()`);
     assert.equal(await evaluate(`document.querySelector('.cs-picker-trigger').getAttribute('aria-expanded')`), 'true');
@@ -101,6 +104,7 @@ try {
     assert.equal(await evaluate(`document.querySelector('.cs-state .cs-value').textContent`), 'В метро по пути на съёмку');
     assert.equal(await evaluate(`!!document.querySelector('.cs-inventory')||!!document.querySelector('.cs-cycle')||!!document.querySelector('.cs-location')`), false);
     assert.equal(await evaluate(`document.querySelector('.cs-presence').textContent`), 'Вне сцены');
+    assert.ok(await evaluate(`document.querySelector('.cs-state').getBoundingClientRect().top-document.querySelector('.cs-outfit').getBoundingClientRect().bottom<=12`), 'NPC state follows outfit without a separate empty grid row');
     await screenshot('npc.png');
     // Theme changes are live, including contrast on a light theme.
     await evaluate(`document.documentElement.style.setProperty('--SmartThemeBlurTintColor','#f4efe3');document.documentElement.style.setProperty('--SmartThemeBodyColor','#29251d');document.documentElement.style.setProperty('--SmartThemeQuoteColor','#80572a')`);
@@ -152,6 +156,7 @@ try {
     await waitFor(`!!document.querySelector('.cs-portrait-image img')`);
     await waitFor(`document.querySelector('.cs-portrait-image').classList.contains('cs-has-image')`);
     assert.ok(await evaluate(`Math.abs(document.querySelector('.cs-portrait-image').clientHeight-document.querySelector('.cs-portrait-image').clientWidth)<2`), 'Square avatar has a square frame');
+    assert.ok(await evaluate(`document.querySelector('.cs-portrait').clientHeight-document.querySelector('.cs-portrait-image').clientHeight<=16`), 'The portrait frame has no separate button strip or empty footer');
     assert.equal(await evaluate(`document.querySelector('.cs-portrait-image img').src===JSON.parse(localStorage.getItem('ct_profiles_v1')).p.uploads['Ло']`), true);
     await evaluate(`var tall=document.createElement('canvas');tall.width=10;tall.height=30;tall.getContext('2d').fillRect(0,0,10,30);var shared=JSON.parse(localStorage.getItem('ct_profiles_v1'));shared.p.uploads['Ло']=tall.toDataURL();localStorage.setItem('ct_profiles_v1',JSON.stringify(shared));document.querySelector('[aria-label="Обновить данные"]').click()`);
     await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalHeight===30`);
@@ -159,7 +164,8 @@ try {
     for (const height of [100,125,139,140,141,175,300]) {
         await evaluate(`var portrait=document.createElement('canvas');portrait.width=100;portrait.height=${height};portrait.getContext('2d').fillRect(0,0,100,${height});var shared=JSON.parse(localStorage.getItem('ct_profiles_v1'));shared.p.uploads['Ло']=portrait.toDataURL();localStorage.setItem('ct_profiles_v1',JSON.stringify(shared));document.querySelector('[aria-label="Обновить данные"]').click()`);
         await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalHeight===${height}`);
-        assert.ok(await evaluate(`Math.abs(document.querySelector('.cs-continuation').getBoundingClientRect().width-document.querySelector('.cs-layout').getBoundingClientRect().width)<2`), `Layout remains full width for portrait ratio ${height}/100`);
+        assert.ok(await evaluate(`[...document.querySelectorAll('.cs-layout .cs-card')].every(node=>{const box=node.getBoundingClientRect(),outer=document.querySelector('.cs-layout').getBoundingClientRect();return box.left>=outer.left-1&&box.right<=outer.right+1})`), `Portrait ratio ${height}/100 does not push data outside the layout`);
+        assert.ok(await evaluate(`document.querySelector('.cs-state').getBoundingClientRect().top-document.querySelector('.cs-outfit').getBoundingClientRect().bottom<=12`), 'State spacing stays compact for every portrait ratio');
         assert.ok(await evaluate(`document.querySelector('.cs-portrait-image img').getBoundingClientRect().height<=302`), 'Tall portraits stay bounded without cropping');
     }
     await evaluate(`document.querySelector('.cs-choice').click()`);
