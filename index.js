@@ -1,6 +1,6 @@
 import { eventSource, event_types } from '../../../../script.js';
 import { FIELDS, clean, nameKey, resolveOwner, displayName, replay, cycleDetails, validateAliases } from './core.js';
-import { defaults, chatKey, loadSettings, readJSON, sharedProfile, backup, importBackup, safeImage } from './storage.js';
+import { defaults, chatKey, createSettingsStore, readJSON, sharedProfile, backup, importBackup, safeImage } from './storage.js';
 import { registerRoleplayPanel, isRoleplayDocked } from './roleplay-tools-adapter.js';
 import { ICON_FILES } from './icons.js';
 
@@ -20,7 +20,9 @@ const WORDS = {
         localHint: 'Имена и портреты, заданные здесь, действуют только в этом чате. Настройки Character Thoughts не изменяются.',
         sharedHint: 'Без своего портрета используется аватарка выбранного набора. Наборы создаются в Character Thoughts.',
         transfer: 'Резервная копия этого чата', export: 'Экспорт', import: 'Импорт', importConfirm: 'Заменить настройки и назначения портретов этого чата данными из копии? Сообщения не изменятся.',
-        storageError: 'Не удалось сохранить данные. Возможно, хранилище браузера заполнено. Экспортируй резервную копию.',
+        storageError: 'Не удалось сохранить данные. Экспортируй резервную копию.',
+        storageFull: 'Хранилище браузера заполнено, резервное сохранение тоже недоступно. Экспортируй резервную копию.',
+        storageBlocked: 'Браузер запрещает сохранение данных для этого сайта. Разреши хранение или экспортируй резервную копию.', loading: 'Загрузка профиля…',
         invalidBackup: 'Не удалось прочитать резервную копию Character Stats.', invalidImage: 'Не удалось открыть изображение.',
         conflict: 'Это имя уже связано с другим персонажем:', saved: 'Сохранено', sharedUpdated: 'Данные Character Thoughts изменились. Закрой настройки, чтобы обновить панель.',
         exportPartial: 'Не все изображения доступны. Экспорт отменён: проверь аватарки или отключи общий набор.',
@@ -45,7 +47,9 @@ const WORDS = {
         localHint: 'Names and portraits set here apply to this chat only. Character Thoughts settings are never changed.',
         sharedHint: 'Without a local portrait, the selected set’s avatar is used. Create sets in Character Thoughts.',
         transfer: 'This chat’s backup', export: 'Export', import: 'Import', importConfirm: 'Replace this chat’s settings and portrait assignments with this backup? Messages will not change.',
-        storageError: 'Could not save data. Browser storage may be full. Export a backup.',
+        storageError: 'Could not save data. Export a backup.',
+        storageFull: 'Browser storage is full and fallback storage is unavailable. Export a backup.',
+        storageBlocked: 'The browser blocks storage for this site. Allow storage or export a backup.', loading: 'Loading profile…',
         invalidBackup: 'Could not read this Character Stats backup.', invalidImage: 'Could not open this image.',
         conflict: 'This name already belongs to another character:', saved: 'Saved', sharedUpdated: 'Character Thoughts data changed. Close settings to refresh the panel.',
         exportPartial: 'Some images are unavailable. Export cancelled: check avatars or disable the shared set.',
@@ -58,6 +62,9 @@ const WORDS = {
 const ICONS = { appearance: 'clipboard-list', outfit: 'shirt', inventory: 'bag-shopping', cycle: 'sparkle', state: 'location-dot', location: 'location-dot', date: 'calendar-days', time: 'clock', weather: 'cloud-sun' };
 let settings = defaults(), state, activeKey = null, profile = {}, settingsOpen = false, editingPerson = '@user';
 let panel, body, title, launcher, notice, settingsButton, pickerHost, lastShared = '', pendingRefresh;
+let refreshId = 0, storageWarning = '', storageLoadFailed = false;
+const settingsStore = createSettingsStore(window);
+const readableStorage = { getItem(key) { try { return window.localStorage.getItem(key); } catch { return null; } } };
 const context = () => window.SillyTavern?.getContext?.() || null;
 const t = key => WORDS[settings.language]?.[key] ?? WORDS.en[key] ?? key;
 const element = (tag, className = '', text) => {
@@ -81,10 +88,25 @@ function button(label, iconName, action, className = '') {
     return node;
 }
 function notify(message) { notice.textContent = message; notice.hidden = !message; }
-function persist() {
-    if (!activeKey) return false;
-    try { localStorage.setItem(activeKey, JSON.stringify(settings)); return true; }
-    catch (error) { console.error('[Character Stats] Storage failed', error); notify(t('storageError')); return false; }
+function storageMessage(error) {
+    const errors = error?.errors || [error];
+    if (errors.some(item => item?.name === 'QuotaExceededError')) return t('storageFull');
+    if (errors.some(item => ['SecurityError', 'NotAllowedError'].includes(item?.name))) return t('storageBlocked');
+    return t('storageError');
+}
+async function persist() {
+    const key = activeKey;
+    if (!key || key !== chatKey(context()) || storageLoadFailed) return false;
+    try {
+        await settingsStore.save(key, settings);
+        if (key !== activeKey || key !== chatKey(context())) return false;
+        if (storageWarning && notice.textContent === storageWarning) notify('');
+        storageWarning = ''; return true;
+    } catch (error) {
+        console.error('[Character Stats] Storage failed', error);
+        if (key === activeKey) { storageWarning = storageMessage(error); notify(storageWarning); }
+        return false;
+    }
 }
 function personLabel(name) {
     if (name === '@user') return settings.people['@user']?.displayName || state?.user.name || t('user');
@@ -98,15 +120,23 @@ function allNames() {
     }
     return [...names.values()];
 }
-function refresh() {
+async function refresh() {
+    const request = ++refreshId;
     const ctx = context();
     const key = chatKey(ctx);
-    const changed = key !== activeKey;
+    const changed = key !== activeKey || storageLoadFailed;
     if (changed) {
-        activeKey = key; settings = loadSettings(localStorage, key);
+        if (body) { body.replaceChildren(element('p', 'cs-empty', t('loading'))); pickerHost.replaceChildren(); }
+        let loaded, loadError;
+        try { loaded = await settingsStore.load(key); } catch (error) { loaded = defaults(); loadError = error; }
+        if (request !== refreshId || key !== chatKey(context())) return;
+        activeKey = key; settings = loaded;
+        storageLoadFailed = !!loadError;
         settingsOpen = false; editingPerson = '@user'; notify('');
+        storageWarning = loadError ? storageMessage(loadError) : '';
+        if (storageWarning) notify(storageWarning);
     }
-    profile = sharedProfile(localStorage, ctx, settings);
+    profile = sharedProfile(readableStorage, ctx, settings);
     lastShared = sharedSignature();
     state = replay(key ? ctx?.chat || [] : [], settings, profile, ctx?.name1 || t('user'));
     const roster = allNames();
@@ -115,7 +145,7 @@ function refresh() {
     render();
 }
 function scheduleRefresh() { clearTimeout(pendingRefresh); pendingRefresh = setTimeout(refresh, 80); }
-function sharedSignature() { return `${localStorage.getItem('ct_profiles_v1') || ''}|${localStorage.getItem('ct_cardmap_v2') || ''}`; }
+function sharedSignature() { return `${readableStorage.getItem('ct_profiles_v1') || ''}|${readableStorage.getItem('ct_cardmap_v2') || ''}`; }
 
 function avatarSources(name) {
     const ownImage = settings.people[name]?.image;
@@ -258,9 +288,9 @@ function birthdayControl(owner) {
     const save = element('button', 'cs-button', t('save')); save.type = 'submit';
     const cancel = button(t('cancel'), null, () => { form.hidden = true; edit.hidden = false; });
     form.append(input, save, cancel); row.append(label, edit, form);
-    form.addEventListener('submit', event => {
+    form.addEventListener('submit', async event => {
         event.preventDefault(); settings.people[owner] = { ...settings.people[owner], birthday: clean(input.value).slice(0, 60) };
-        if (persist()) render();
+        if (await persist()) render();
     });
     return row;
 }
@@ -270,9 +300,9 @@ function notesCard(owner) {
     const status = element('span', 'cs-notes-status'); status.setAttribute('aria-live', 'polite');
     const input = element('textarea', 'cs-notes-input'); input.rows = 3; input.maxLength = 2000;
     input.placeholder = t('notesHint'); input.setAttribute('aria-label', t('personalNotes')); input.value = settings.people[owner]?.notes || '';
-    const save = button(t('save'), null, () => {
+    const save = button(t('save'), null, async () => {
         settings.people[owner] = { ...settings.people[owner], notes: input.value.slice(0, 2000) };
-        if (persist()) status.textContent = t('saved');
+        if (await persist()) status.textContent = t('saved');
     }, 'cs-notes-save');
     input.addEventListener('input', () => {
         settings.people[owner] = { ...settings.people[owner], notes: input.value.slice(0, 2000) };
@@ -332,7 +362,7 @@ function renderSettings() {
     for (const field of FIELDS) visible.append(checkbox(t(field === 'notes' ? 'personalNotes' : field), settings.visible[field], value => { settings.visible[field] = value; persist(); }));
     wrap.append(visible);
     wrap.append(checkbox(t('sharing'), settings.shareAvatars, value => { settings.shareAvatars = value; persist(); refresh(); }));
-    const profiles = readJSON(localStorage, 'ct_profiles_v1');
+    const profiles = readJSON(readableStorage, 'ct_profiles_v1');
     if (settings.shareAvatars) {
         wrap.append(settingField(t('avatarSet'), select([['', t('automatic')], ...Object.entries(profiles).map(([id, value]) => [id, value.name || id])], settings.profileId, value => { settings.profileId = value; persist(); refresh(); })));
         wrap.append(element('p', 'cs-help', t('sharedHint')));
@@ -354,12 +384,12 @@ function renderSettings() {
     }
     const birthday = element('input'); birthday.type = 'text'; birthday.maxLength = 60; birthday.value = person.birthday || ''; birthday.placeholder = t('birthdayHint');
     people.append(settingField(t('birthday'), birthday));
-    const save = button(t('save'), null, () => {
+    const save = button(t('save'), null, async () => {
         const items = aliases ? [...new Set(aliases.value.split(',').map(clean).filter(value => value && nameKey(value) !== nameKey(owner)))] : [];
         const collision = owner === '@user' ? null : validateAliases(owner, items, settings, profile, allNames());
         if (collision) { notify(`${t('conflict')} ${collision}`); return; }
         settings.people[owner] = { ...settings.people[owner], displayName: clean(display.value), aliases: items, birthday: clean(birthday.value).slice(0, 60) };
-        if (persist()) { notify(t('saved')); refresh(); }
+        if (await persist()) { notify(t('saved')); refresh(); }
     }, 'cs-primary');
     const actions = element('div', 'cs-setting-actions'); actions.append(save, button(t('portrait'), null, () => uploadPortrait(owner)));
     if (person.image) actions.append(button(t('clearPortrait'), null, () => { settings.people[owner].image = ''; persist(); render(); }));
@@ -398,7 +428,7 @@ async function uploadPortrait(owner) {
             const data = canvas.toDataURL('image/webp', 0.88);
             if (capturedKey !== chatKey(context())) return;
             settings.people[owner] = { ...settings.people[owner], image: data };
-            if (persist()) { notify(''); render(); }
+            if (await persist()) { notify(''); render(); }
         } finally { URL.revokeObjectURL(url); }
     } catch (error) { console.error('[Character Stats] Portrait failed', error); notify(t('invalidImage')); }
 }
@@ -443,7 +473,7 @@ async function importSettings() {
         const imported = importBackup(JSON.parse(await file.text()));
         if (capturedKey !== chatKey(context())) return;
         if (!window.confirm(t('importConfirm'))) return;
-        settings = imported; persist(); notify(''); refresh();
+        settings = imported; if (await persist()) { notify(''); refresh(); }
     } catch (error) { console.error('[Character Stats] Import failed', error); notify(t('invalidBackup')); }
 }
 
@@ -511,7 +541,13 @@ function createUI() {
     for (const name of ['CHAT_CHANGED', 'CHAT_CREATED', 'MESSAGE_RECEIVED', 'MESSAGE_EDITED', 'MESSAGE_UPDATED', 'MESSAGE_SWIPED', 'MESSAGE_DELETED', 'CHARACTER_MESSAGE_RENDERED', 'USER_MESSAGE_RENDERED', 'GENERATION_ENDED', 'GROUP_UPDATED']) {
         if (event_types[name]) eventSource.on(event_types[name], scheduleRefresh);
     }
-    window.addEventListener('storage', event => { if (event.key === activeKey) { settings = loadSettings(localStorage, activeKey); scheduleRefresh(); } else if (event.key?.startsWith('ct_')) scheduleRefresh(); });
+    window.addEventListener('storage', async event => {
+        if (event.key === activeKey) {
+            const key = activeKey;
+            try { const loaded = await settingsStore.load(key); if (key === activeKey) { settings = loaded; scheduleRefresh(); } }
+            catch (error) { if (key === activeKey) notify(storageMessage(error)); }
+        } else if (event.key?.startsWith('ct_')) scheduleRefresh();
+    });
     // localStorage events do not fire in the same page when Thoughts changes a set.
     setInterval(() => {
         if (panel.style.display === 'none' || panel.hidden) return;

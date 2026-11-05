@@ -120,11 +120,13 @@ Birth dates and notes are included in backups. Neither is injected into the mode
 
 Character Stats stores per-chat UI data in this browser's `localStorage`, under `wani_character_stats_v1::<card-or-group>::<chat-id>`. This includes the saved roster, selected character, filters, visible sections, language, aliases, display names, portrait overrides, birth dates, personal notes, and optional shared-set selection. Matching chat names on different cards do not share data.
 
+If localStorage is full or unavailable, the extension automatically saves to **IndexedDB** instead (database `wani_character_stats_v1`, store `chats`, using the same chat keys). Existing localStorage data is kept; nothing from this or other extensions is deleted. On loading a chat, the newest saved copy is used, including after reloading the page. A successful save is reported only after the fallback transaction commits. If neither storage method works, the panel shows a saving error and keeps the current in-memory data available for export.
+
 Current stats are reconstructed from chat messages, so no extra copy is injected into model context. The original info blocks in messages still occupy their normal context space. The extension does not change your context or regex settings.
 
 **Export** creates a JSON backup of this chat's settings and portraits, including inherited portraits that can be read. Export is cancelled with a visible message if a referenced portrait cannot be read. **Import** replaces settings for the currently open chat after confirmation; it does not edit messages or import another chat's story facts. Shared aliases and display names are materialized into the backup for portability. Character Thoughts profiles themselves are not overwritten.
 
-Browser storage is device-specific and may be cleared by browser cleanup. Export before changing browsers, clearing site data, or reinstalling. Copying the extension folder or updating it does not transfer browser storage. If saving fails, a visible message advises exporting a backup.
+Both storage methods are browser-local and device-specific and may be cleared by browser cleanup. Export before changing browsers, clearing site data, or reinstalling. Copying the extension folder or updating it does not transfer browser storage. If saving fails, a visible message advises exporting a backup.
 
 ## Parsing limits
 

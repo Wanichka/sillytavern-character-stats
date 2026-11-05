@@ -17,7 +17,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewp
 window.handlers={};window.emit=(type)=>{for(const cb of handlers[type]||[])cb()};
 window.ctx={chatId:'chat-one',name1:'Алиса',characters:[{avatar:'law.png',name:'Law'}],characterId:0,chat:[{mes:\`<user_stats><basic_info>Алиса's appearance: 19 лет; 172 см; рыжие волосы</basic_info><outfit>Чёрная водолазка; тёмно-зелёный кардиган; клетчатая юбка; ботинки на шнуровке; подвеска-полумесяц.</outfit><inventory>Сумка, телефон, ключи от квартиры, свитер.</inventory><cycle>Day: 8/28, фолликулярная фаза; Pregnancy: No; Risk: None</cycle></user_stats><general_stats><location>Нью-Йорк · Манхэттен\nДом Скандинавии, внутренний сад</location><date>Четверг, 05.11.26</date><time>15:05</time><weather>Ясный осенний день ☀</weather><char_around>Characters around: Камилла (Ло в метро)</char_around></general_stats><char_stats><char_info>Ло: adult ; Камилла: adult</char_info><char_outfit>Outfit = Ло: Тёмная рубашка и джинсы ; Камилла: Джинсовая рубашка</char_outfit><char_notes>State = Ло: В метро по пути на съёмку ; Камилла: Во внутреннем саду</char_notes><char_mood>Mood = Ло: собранный ; Камилла: сосредоточенная</char_mood></char_stats>\`}]};
 window.SillyTavern={getContext:()=>window.ctx};
-localStorage.clear();localStorage.setItem('ct_profiles_v1',JSON.stringify({p:{name:'Modern AU',aliases:{'Ло':['Law']},displayNames:{'Ло':'Ло Трафальгар'},avatars:{},uploads:{},characters:['Ло']}}));localStorage.setItem('ct_cardmap_v2',JSON.stringify({'card:law.png':'p'}));
+if(!sessionStorage.getItem('cs-test-boot')){localStorage.clear();sessionStorage.setItem('cs-test-boot','1')}localStorage.setItem('ct_profiles_v1',JSON.stringify({p:{name:'Modern AU',aliases:{'Ло':['Law']},displayNames:{'Ло':'Ло Трафальгар'},avatars:{},uploads:{},characters:['Ло']}}));localStorage.setItem('ct_cardmap_v2',JSON.stringify({'card:law.png':'p'}));
 </script><script type="module" src="/scripts/extensions/third-party/sillytavern-character-stats/index.js"></script></body></html>`;
 const server = http.createServer(async (req, res) => {
     try {
@@ -263,9 +263,49 @@ try {
         assert.equal(await evaluate(`document.querySelector('#cs-panel').getBoundingClientRect().width>100`), true);
         assert.equal(await evaluate(`document.querySelector('.cs-body').scrollWidth<=document.querySelector('.cs-body').clientWidth+1`), true);
     } catch (error) { if (error.code !== 'ENOENT') throw error; console.log('Host fixtures not present; host integration skipped.'); }
+    // Exhaust only the extension's localStorage writes; other extensions remain intact.
+    await evaluate(`localStorage.setItem('other-extension-sentinel','keep');window.originalSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(String(key).startsWith('wani_character_stats_v1::'))throw new DOMException('Simulated full localStorage','QuotaExceededError');return originalSetItem.call(this,key,value)}`);
+    await evaluate(`document.querySelector('.cs-birthday-edit').click();document.querySelector('.cs-birthday-input').value='07.11.2001';document.querySelector('.cs-birthday-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))`);
+    await waitFor(`document.querySelector('.cs-birthday-edit')?.textContent==='07.11.2001'`);
+    await evaluate(`document.querySelector('.cs-notes-input').value='Резервная запись\\nПосле заполнения localStorage';document.querySelector('.cs-notes-input').dispatchEvent(new Event('input'));document.querySelector('.cs-notes-save').click()`);
+    await waitFor(`document.querySelector('.cs-notes-status')?.textContent==='Сохранено'`);
+    await evaluate(`document.querySelector('.cs-portrait-edit').click()`);await chooseFile(rectangleFixture);
+    await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalHeight===300`);
+    const fallbackKey=await evaluate(`(async()=>{window.storageApi=await import('/scripts/extensions/third-party/sillytavern-character-stats/storage.js');return storageApi.chatKey(ctx)})()`);
+    const fallback=await evaluate(`storageApi.createSettingsStore(window).load(${JSON.stringify(fallbackKey)})`);
+    assert.equal(fallback.people['@user'].birthday,'07.11.2001');
+    assert.ok(fallback.people['@user'].notes.includes('Резервная запись'));
+    assert.ok(fallback.people['@user'].image.startsWith('data:image/'));
+    assert.equal(await evaluate(`localStorage.getItem('other-extension-sentinel')`),'keep');
+    assert.ok(await evaluate(`!document.querySelector('.cs-notice').textContent.includes('Не удалось')`));
+    const portable=await evaluate(`(async()=>storageApi.backup(await storageApi.createSettingsStore(window).load(${JSON.stringify(fallbackKey)})))()`);
+    assert.equal(portable.settings.people['@user'].notes,fallback.people['@user'].notes);
+    // Reload creates a fresh store instance; the fallback must win over stale legacy data.
+    await send('Page.reload');await waitFor(`!!document.querySelector('#cs-launcher')`);
+    await evaluate(`document.querySelector('#cs-launcher').click();ctx.chatId='chat-two';emit('CHAT_CHANGED')`);
+    await waitFor(`document.querySelector('.cs-birthday-edit')?.textContent==='07.11.2001'`);
+    assert.ok(await evaluate(`document.querySelector('.cs-notes-input').value.includes('Резервная запись')`));
+    await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalHeight===300`);
+    assert.equal(await evaluate(`localStorage.getItem('other-extension-sentinel')`),'keep');
+    // Once localStorage is writable again, its newer record must beat the old IDB copy.
+    await evaluate(`document.querySelector('.cs-notes-input').value='Новая запись после перезагрузки';document.querySelector('.cs-notes-save').click()`);
+    await waitFor(`document.querySelector('.cs-notes-status')?.textContent==='Сохранено'`);
+    assert.equal(await evaluate(`(async()=>{window.storageApi=await import('/scripts/extensions/third-party/sillytavern-character-stats/storage.js');return (await storageApi.createSettingsStore(window).load(${JSON.stringify(fallbackKey)})).people['@user'].notes})()`),'Новая запись после перезагрузки');
+    // An abort after the put request succeeds must never display Saved.
+    await evaluate(`window.originalSetItem=Storage.prototype.setItem;window.originalPut=IDBObjectStore.prototype.put;Storage.prototype.setItem=function(key,value){if(String(key).startsWith('wani_character_stats_v1::'))throw new DOMException('Simulated full storage','QuotaExceededError');return originalSetItem.call(this,key,value)};IDBObjectStore.prototype.put=function(...args){const request=originalPut.apply(this,args);if(this.transaction.db.name==='wani_character_stats_v1')request.addEventListener('success',()=>this.transaction.abort());return request};document.querySelector('.cs-notes-input').value='Повтор после ошибки';document.querySelector('.cs-notes-input').dispatchEvent(new Event('input'));document.querySelector('.cs-notes-save').click()`);
+    await waitFor(`document.querySelector('.cs-notice').textContent.includes('резервное сохранение')`);
+    assert.notEqual(await evaluate(`document.querySelector('.cs-notes-status').textContent`),'Сохранено');
+    await evaluate(`Storage.prototype.setItem=originalSetItem;IDBObjectStore.prototype.put=originalPut;document.querySelector('.cs-notes-save').click()`);
+    await waitFor(`document.querySelector('.cs-notes-status').textContent==='Сохранено'&&document.querySelector('.cs-notice').hidden`);
+    // IndexedDB also works if browser policy blocks localStorage reads as well as writes.
+    const policyNotes=await evaluate(`(async()=>{const blocked=()=>{throw new DOMException('Blocked','SecurityError')};const store=storageApi.createSettingsStore({localStorage:{getItem:blocked,setItem:blocked},indexedDB});const data=storageApi.defaults();data.people.A={notes:'Policy fallback'};await store.save('policy-fixture',data);return (await store.load('policy-fixture')).people.A.notes})()`);
+    assert.equal(policyNotes,'Policy fallback');
+    console.log('Storage regression passed: quota fallback, committed save, portrait/notes/birth date after reload, newest-copy selection, no deletion, policy fallback, aborted-write failure and retry.');
+
     assert.deepEqual(connection.errors, []);
     console.log('Browser checks passed: user/NPC fields, aliases, themes, swipe/delete rollback, chat isolation, mobile and optional Roleplay Tools docking.');
 } finally {
     if (browserSocket) { try { await browserSocket.send('Browser.close'); } catch {} browserSocket.socket.close(); }
-    connection?.socket.close(); child.kill(); server.close();
+    connection?.socket.close(); child.kill(); child.stderr?.destroy(); child.unref();
+    server.closeAllConnections?.(); server.close();
 }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { clean, nameKey, parseMessage, namedSegments, replay, cycleDetails, resolveOwner, validateAliases, ageFromInfo } from '../core.js';
-import { chatKey, loadSettings, sharedProfile, backup, importBackup, defaults } from '../storage.js';
+import { chatKey, loadSettings, sharedProfile, backup, importBackup, defaults, createSettingsStore } from '../storage.js';
 
 const assistant = mes => ({ mes });
 const user = content => `<user_stats>${content}</user_stats>`;
@@ -139,4 +139,25 @@ test('birth dates, legacy ages and multiline notes survive backups and remain ch
     const invalid = importBackup({ format: 'wani-character-stats', version: 1, settings: { people: { A: { age: 24, birthday: 2000, notes: { text: 'ignored' } } } } });
     assert.equal(invalid.people.A.age, ''); assert.equal(invalid.people.A.notes, '');
     assert.equal(invalid.people.A.birthday, '');
+});
+
+test('settings store reads legacy data and serializes immutable snapshots per chat', async () => {
+    const records = new Map([['first', JSON.stringify({ people: { A: { birthday: '20 июня' } } })], ['other', JSON.stringify({ people: { A: { notes: 'Other chat' } } })]]);
+    const localStorage = { getItem: key => records.get(key) || null, setItem: (key, value) => records.set(key, value) };
+    const store = createSettingsStore({ localStorage });
+    assert.equal((await store.load('first')).people.A.birthday, '20 июня');
+    const draft = defaults(); draft.people.A = { notes: 'Snapshot' };
+    const saving = store.save('first', draft); draft.people.A.notes = 'Later mutation';
+    await saving; assert.equal((await store.load('first')).people.A.notes, 'Snapshot');
+    const newer = defaults(); newer.people.A = { notes: 'Newest' };
+    await Promise.all([store.save('first', draft), store.save('first', newer)]);
+    assert.equal((await store.load('first')).people.A.notes, 'Newest');
+    assert.equal((await store.load('other')).people.A.notes, 'Other chat');
+});
+
+test('settings store rejects failed writes instead of reporting success', async () => {
+    const blocked = () => { const error = new Error('Blocked'); error.name = 'SecurityError'; throw error; };
+    const store = createSettingsStore({ localStorage: { getItem: blocked, setItem: blocked } });
+    await assert.rejects(store.save('chat', defaults()), AggregateError);
+    await assert.rejects(store.load('chat'), AggregateError);
 });
