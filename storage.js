@@ -28,6 +28,7 @@ export function sanitizeSettings(raw = {}) {
             displayName: typeof item.displayName === 'string' ? item.displayName : '',
             aliases: Array.isArray(item.aliases) ? item.aliases.filter(alias => typeof alias === 'string').map(clean).filter(Boolean) : [],
             image: safeImage(item.image) ? item.image : '',
+            imageFile: safeImageFile(item.imageFile) ? item.imageFile : '',
             age: typeof item.age === 'string' ? item.age.trim().slice(0, 30) : '',
             birthday: typeof item.birthday === 'string' ? item.birthday.trim().slice(0, 60) : '',
             notes: typeof item.notes === 'string' ? item.notes.slice(0, 2000) : '',
@@ -38,6 +39,9 @@ export function sanitizeSettings(raw = {}) {
 export function safeImage(value) {
     // Uploaded raster images only; no SVG, remote URLs, or executable URLs in backups.
     return typeof value === 'string' && /^data:image\/(png|jpeg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(value);
+}
+export function safeImageFile(value) {
+    return typeof value === 'string' && /^wani-character-stats-avatar-[a-z0-9]+-[a-z0-9]+\.(png|jpeg|webp|gif)$/.test(value);
 }
 export function loadSettings(storage, key) { return sanitizeSettings(key ? readJSON(storage, key) : {}); }
 
@@ -88,20 +92,54 @@ export function createSettingsStore(environment) {
         });
     }
     const stamp = value => Number.isFinite(value?._savedAt) ? value._savedAt : 0;
+    async function capture(key) {
+        let local, stored, localError, databaseError;
+        try { local = environment.localStorage.getItem(key); } catch (error) { localError = error; }
+        try { stored = await readDatabase(key); } catch (error) { databaseError = error; }
+        const parsed = local ? readJSON({ getItem: () => local }, key, null) : null;
+        if (!parsed && !stored && localError && databaseError) throw new AggregateError([localError, databaseError], 'Settings storage is unavailable');
+        // A malformed record must not be replaced with defaults during migration.
+        if ((local && !parsed) || (stored && (typeof stored !== 'object' || Array.isArray(stored)))) throw new Error('Invalid legacy settings');
+        const latest = stored && (!parsed || stamp(stored) >= stamp(parsed)) ? stored : parsed;
+        return { settings: latest ? sanitizeSettings(latest) : null, savedAt: stamp(latest), local, database: JSON.stringify(stored) };
+    }
     return {
+        capture,
+        async keys() {
+            const keys = new Set(); let localError, databaseError;
+            try { for (let i = 0; i < environment.localStorage.length; i++) keys.add(environment.localStorage.key(i)); } catch (error) { localError = error; }
+            try {
+                const db = await database();
+                const stored = await new Promise((resolve, reject) => {
+                    const request = db.transaction('chats', 'readonly').objectStore('chats').getAllKeys();
+                    request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+                });
+                for (const key of stored) keys.add(key);
+            } catch (error) { databaseError = error; }
+            if (localError && databaseError) throw new AggregateError([localError, databaseError], 'Cannot list legacy settings');
+            return [...keys].filter(key => typeof key === 'string' && key.startsWith(`${PREFIX}::`));
+        },
+        async retire(key, captured) {
+            if (!key?.startsWith(`${PREFIX}::`) || !captured) return;
+            // Only retire byte-for-byte unchanged copies after the caller verified its disk copy.
+            try { if (captured.local && environment.localStorage.getItem(key) === captured.local) environment.localStorage.removeItem(key); } catch { /* Retry on a later visit. */ }
+            try {
+                const db = await database();
+                await new Promise((resolve, reject) => {
+                    const transaction = db.transaction('chats', 'readwrite'); const store = transaction.objectStore('chats');
+                    const request = store.get(key);
+                    request.onsuccess = () => { if (request.result && JSON.stringify(request.result) === captured.database) store.delete(key); };
+                    transaction.oncomplete = resolve;
+                    transaction.onerror = transaction.onabort = () => reject(transaction.error || new Error('Legacy cleanup aborted'));
+                });
+            } catch { /* The verified disk copy is safe; a leftover browser copy can wait. */ }
+        },
         async load(key) {
             if (!key) return defaults();
             await pending.catch(() => {});
-            let local, stored, localError, databaseError;
-            try {
-                const raw = environment.localStorage.getItem(key);
-                local = raw ? readJSON({ getItem: () => raw }, key, null) : null;
-            } catch (error) { localError = error; }
-            try { stored = await readDatabase(key); } catch (error) { databaseError = error; }
-            if (!local && !stored && localError && databaseError) throw new AggregateError([localError, databaseError], 'Settings storage is unavailable');
-            const latest = stored && (!local || stamp(stored) >= stamp(local)) ? stored : local;
-            revision = Math.max(revision, stamp(latest));
-            return sanitizeSettings(latest);
+            const captured = await capture(key);
+            revision = Math.max(revision, captured.savedAt);
+            return captured.settings || defaults();
         },
         save(key, settings) {
             if (!key) return Promise.reject(new Error('No active chat'));
@@ -131,5 +169,8 @@ export function backup(settings) {
 }
 export function importBackup(value) {
     if (value?.format !== 'wani-character-stats' || value.version !== 1 || !value.settings || typeof value.settings !== 'object') throw new Error('Invalid Character Stats backup');
-    return sanitizeSettings(value.settings);
+    const settings = sanitizeSettings(value.settings);
+    // Backup images are portable data URLs; never trust file references from another installation.
+    for (const person of Object.values(settings.people)) person.imageFile = '';
+    return settings;
 }

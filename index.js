@@ -1,8 +1,10 @@
 import { eventSource, event_types } from '../../../../script.js';
+import { getStringHash } from '../../../utils.js';
 import { FIELDS, clean, nameKey, resolveOwner, displayName, replay, cycleDetails, validateAliases } from './core.js';
 import { defaults, chatKey, createSettingsStore, readJSON, sharedProfile, backup, importBackup, safeImage } from './storage.js';
 import { registerRoleplayPanel, isRoleplayDocked } from './roleplay-tools-adapter.js';
 import { ICON_FILES } from './icons.js';
+import { createFileSettingsStore, fileUrl } from './file-storage.js';
 
 const WORDS = {
     ru: {
@@ -20,13 +22,14 @@ const WORDS = {
         localHint: 'Имена и портреты, заданные здесь, действуют только в этом чате. Настройки Character Thoughts не изменяются.',
         sharedHint: 'Без своего портрета используется аватарка выбранного набора. Наборы создаются в Character Thoughts.',
         transfer: 'Резервная копия этого чата', export: 'Экспорт', import: 'Импорт', importConfirm: 'Заменить настройки и назначения портретов этого чата данными из копии? Сообщения не изменятся.',
-        storageError: 'Не удалось сохранить данные. Экспортируй резервную копию.',
+        storageError: 'Не удалось подтвердить сохранение в файлы SillyTavern. Повтори сохранение или экспортируй резервную копию. Данные в браузере не удалены.',
         storageFull: 'Хранилище браузера заполнено, резервное сохранение тоже недоступно. Экспортируй резервную копию.',
         storageBlocked: 'Браузер запрещает сохранение данных для этого сайта. Разреши хранение или экспортируй резервную копию.', loading: 'Загрузка профиля…',
         invalidBackup: 'Не удалось прочитать резервную копию Character Stats.', invalidImage: 'Не удалось открыть изображение.',
         conflict: 'Это имя уже связано с другим персонажем:', saved: 'Сохранено', sharedUpdated: 'Данные Character Thoughts изменились. Закрой настройки, чтобы обновить панель.',
         exportPartial: 'Не все изображения доступны. Экспорт отменён: проверь аватарки или отключи общий набор.',
-        inherited: 'Из Character Thoughts:', notes: 'Настройки сохраняются в браузере для этого чата. Данные не отправляются модели.',
+        inherited: 'Из Character Thoughts:', notes: 'Профиль хранится в файлах SillyTavern с привязкой к чату. Данные не отправляются модели.',
+        migrate: 'Перенести остальные чаты из браузера', migrating: 'Перенос сохранённых профилей…', migrated: 'Перенесено профилей:', migrationFailed: 'Не удалось перенести (старые копии сохранены):',
         noName: 'Имя не может быть пустым', birthday: 'Дата рождения', setBirthday: 'Указать', editBirthday: 'Изменить дату рождения',
         birthdayHint: 'Например, 20 июня или 20.06.2000.', cancel: 'Отмена',
         personalNotes: 'Заметки', notesHint: 'Кто этот персонаж, важные связи, даты — всё, что нужно держать под рукой.',
@@ -47,13 +50,14 @@ const WORDS = {
         localHint: 'Names and portraits set here apply to this chat only. Character Thoughts settings are never changed.',
         sharedHint: 'Without a local portrait, the selected set’s avatar is used. Create sets in Character Thoughts.',
         transfer: 'This chat’s backup', export: 'Export', import: 'Import', importConfirm: 'Replace this chat’s settings and portrait assignments with this backup? Messages will not change.',
-        storageError: 'Could not save data. Export a backup.',
+        storageError: 'Could not verify saving to SillyTavern files. Retry saving or export a backup. Browser copies have not been removed.',
         storageFull: 'Browser storage is full and fallback storage is unavailable. Export a backup.',
         storageBlocked: 'The browser blocks storage for this site. Allow storage or export a backup.', loading: 'Loading profile…',
         invalidBackup: 'Could not read this Character Stats backup.', invalidImage: 'Could not open this image.',
         conflict: 'This name already belongs to another character:', saved: 'Saved', sharedUpdated: 'Character Thoughts data changed. Close settings to refresh the panel.',
         exportPartial: 'Some images are unavailable. Export cancelled: check avatars or disable the shared set.',
-        inherited: 'From Character Thoughts:', notes: 'Settings are stored in this browser for this chat. Nothing is sent to the model.', noName: 'A name is required',
+        inherited: 'From Character Thoughts:', notes: 'Profiles are stored in SillyTavern files, separately for each chat. Nothing is sent to the model.', noName: 'A name is required',
+        migrate: 'Move other chats out of browser storage', migrating: 'Moving saved profiles…', migrated: 'Profiles moved:', migrationFailed: 'Could not move (old copies preserved):',
         birthday: 'Birth date', setBirthday: 'Set date', editBirthday: 'Edit birth date', birthdayHint: 'For example, June 20 or 20.06.2000.', cancel: 'Cancel',
         personalNotes: 'Notes', notesHint: 'Who this character is, important connections, dates — anything to keep at hand.',
         unsaved: 'Unsaved changes', squareOnly: 'NPC portraits must be square. The previous portrait has been kept.',
@@ -63,7 +67,7 @@ const ICONS = { appearance: 'clipboard-list', outfit: 'shirt', inventory: 'bag-s
 let settings = defaults(), state, activeKey = null, profile = {}, settingsOpen = false, editingPerson = '@user';
 let panel, body, title, launcher, notice, settingsButton, pickerHost, lastShared = '', pendingRefresh;
 let refreshId = 0, storageWarning = '', storageLoadFailed = false;
-const settingsStore = createSettingsStore(window);
+const settingsStore = createFileSettingsStore({ fetch: (...args) => window.fetch(...args), getRequestHeaders: () => context()?.getRequestHeaders?.() || { 'Content-Type': 'application/json' }, hash: getStringHash, legacy: createSettingsStore(window) });
 const readableStorage = { getItem(key) { try { return window.localStorage.getItem(key); } catch { return null; } } };
 const context = () => window.SillyTavern?.getContext?.() || null;
 const t = key => WORDS[settings.language]?.[key] ?? WORDS.en[key] ?? key;
@@ -97,9 +101,16 @@ function storageMessage(error) {
 async function persist() {
     const key = activeKey;
     if (!key || key !== chatKey(context()) || storageLoadFailed) return false;
+    const current = settings;
+    const images = Object.fromEntries(Object.entries(current.people).map(([name, person]) => [name, person.image]));
     try {
-        await settingsStore.save(key, settings);
+        const stored = await settingsStore.save(key, current);
         if (key !== activeKey || key !== chatKey(context())) return false;
+        if (settings === current) for (const [name, person] of Object.entries(stored.people)) {
+            if (person.imageFile && settings.people[name]?.image === images[name]) {
+                settings.people[name].image = ''; settings.people[name].imageFile = person.imageFile;
+            }
+        }
         if (storageWarning && notice.textContent === storageWarning) notify('');
         storageWarning = ''; return true;
     } catch (error) {
@@ -128,10 +139,10 @@ async function refresh() {
     if (changed) {
         if (body) { body.replaceChildren(element('p', 'cs-empty', t('loading'))); pickerHost.replaceChildren(); }
         let loaded, loadError;
-        try { loaded = await settingsStore.load(key); } catch (error) { loaded = defaults(); loadError = error; }
+        try { loaded = await settingsStore.load(key); } catch (error) { loaded = error.settings || defaults(); loadError = error; }
         if (request !== refreshId || key !== chatKey(context())) return;
         activeKey = key; settings = loaded;
-        storageLoadFailed = !!loadError;
+        storageLoadFailed = !!loadError && !loadError.settings;
         settingsOpen = false; editingPerson = '@user'; notify('');
         storageWarning = loadError ? storageMessage(loadError) : '';
         if (storageWarning) notify(storageWarning);
@@ -150,6 +161,7 @@ function sharedSignature() { return `${readableStorage.getItem('ct_profiles_v1')
 function avatarSources(name) {
     const ownImage = settings.people[name]?.image;
     if (safeImage(ownImage)) return [ownImage];
+    if (settings.people[name]?.imageFile) return [fileUrl(settings.people[name].imageFile)];
     if (name === '@user' || !settings.shareAvatars) return [];
     const owner = resolveOwner(name, {}, profile);
     if (safeImage(profile.uploads?.[owner])) return [profile.uploads[owner]];
@@ -392,10 +404,22 @@ function renderSettings() {
         if (await persist()) { notify(t('saved')); refresh(); }
     }, 'cs-primary');
     const actions = element('div', 'cs-setting-actions'); actions.append(save, button(t('portrait'), null, () => uploadPortrait(owner)));
-    if (person.image) actions.append(button(t('clearPortrait'), null, () => { settings.people[owner].image = ''; persist(); render(); }));
+    if (person.image || person.imageFile) actions.append(button(t('clearPortrait'), null, async () => { settings.people[owner].image = ''; settings.people[owner].imageFile = ''; if (await persist()) render(); }));
     people.append(actions, element('p', 'cs-help', t('localHint'))); wrap.append(people);
     const transfer = element('fieldset'); transfer.append(element('legend', '', t('transfer')));
     const transfers = element('div', 'cs-setting-actions'); transfers.append(button(t('export'), null, exportSettings), button(t('import'), null, importSettings)); transfer.append(transfers); wrap.append(transfer);
+    const migrate = button(t('migrate'), null, async () => {
+        const key = activeKey;
+        migrate.disabled = true;
+        try {
+            if (!await persist()) return;
+            notify(t('migrating'));
+            const result = await settingsStore.migrateAll(key);
+            if (key === activeKey) notify(`${t('migrated')} ${result.migrated}. ${result.failed ? `${t('migrationFailed')} ${result.failed}.` : ''}`);
+        } catch (error) { console.error('[Character Stats] Migration failed', error); if (key === activeKey) notify(storageMessage(error)); }
+        finally { migrate.disabled = false; }
+    });
+    transfer.append(migrate);
     body.append(wrap);
 }
 
@@ -427,7 +451,7 @@ async function uploadPortrait(owner) {
             canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
             const data = canvas.toDataURL('image/webp', 0.88);
             if (capturedKey !== chatKey(context())) return;
-            settings.people[owner] = { ...settings.people[owner], image: data };
+            settings.people[owner] = { ...settings.people[owner], image: data, imageFile: '' };
             if (await persist()) { notify(''); render(); }
         } finally { URL.revokeObjectURL(url); }
     } catch (error) { console.error('[Character Stats] Portrait failed', error); notify(t('invalidImage')); }
@@ -437,7 +461,7 @@ async function exportSettings() {
     const data = backup(settings);
     try {
         // Materialize inherited portraits into the backup, not into live settings.
-        for (const name of ['@user', ...allNames()]) {
+        for (const name of new Set(['@user', ...allNames(), ...Object.keys(settings.people)])) {
             const sources = avatarSources(name);
             const owner = resolveOwner(name, {}, profile);
             const local = data.settings.people[name] || {};
@@ -457,6 +481,7 @@ async function exportSettings() {
                 if (!image) throw new Error('Avatar missing');
                 entry.image = image;
             }
+            delete entry.imageFile;
             data.settings.people[name] = entry;
         }
         if (capturedKey !== chatKey(context())) return;

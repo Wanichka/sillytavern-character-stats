@@ -18,6 +18,7 @@ A theme-aware SillyTavern extension for viewing the user's and NPCs' current sta
 - Choose visible sections in settings; no section collapse buttons clutter the main view.
 - SillyTavern theme colors, one Times New Roman font family, and locally bundled SVG icons.
 - Standalone and Roleplay Tools docking modes, Russian and English interfaces, and per-chat JSON backups.
+- Disk-backed profiles and separate avatar files in SillyTavern, with verified migration from older browser storage.
 
 ## Installation
 
@@ -118,15 +119,20 @@ Birth dates and notes are included in backups. Neither is injected into the mode
 
 ## Storage and backups
 
-Character Stats stores per-chat UI data in this browser's `localStorage`, under `wani_character_stats_v1::<card-or-group>::<chat-id>`. This includes the saved roster, selected character, filters, visible sections, language, aliases, display names, portrait overrides, birth dates, personal notes, and optional shared-set selection. Matching chat names on different cards do not share data.
+Since **1.2.0**, Character Stats saves profiles to files on the machine running SillyTavern, through its built-in authenticated file API. No server plugin is required. In a standard installation, the files are under `data/<user-handle>/user/files/` (`default-user` for the default account):
 
-If localStorage is full or unavailable, the extension automatically saves to **IndexedDB** instead (database `wani_character_stats_v1`, store `chats`, using the same chat keys). Existing localStorage data is kept; nothing from this or other extensions is deleted. On loading a chat, the newest saved copy is used, including after reloading the page. A successful save is reported only after the fallback transaction commits. If neither storage method works, the panel shows a saving error and keeps the current in-memory data available for export.
+- `wani-character-stats-chat-<id>.json`: the saved roster, selected character, filters, visible sections, language, aliases, display names, birth dates, personal notes, shared-set selection, and portrait file references. Each card/group and chat ID has its own file; matching chat names on different cards remain separate.
+- `wani-character-stats-avatar-<id>.<extension>`: uploaded raster portraits. Image data is no longer embedded in browser settings. Identical uploads reuse the same verified file. Replaced images are retained on disk; the extension does not delete files automatically.
+
+Updating the extension or clearing browser data does not remove these files. A different browser connected to the same SillyTavern account and instance can load them. For a remote installation, the files are on that server, not on the device running the browser. Raw chat exports do not include these separate profile files; use the extension's **Export** button or back up the SillyTavern user directory.
+
+**Migration:** opening a chat automatically moves its older Character Stats data from `localStorage` or IndexedDB to the new files. In settings, **Move other chats out of browser storage** migrates remaining saved profiles without opening each chat. The extension reads back and verifies the saved JSON and newly uploaded images before removing the unchanged old copies. Failed uploads preserve browser data and can be retried. Other extensions' storage, including Character Thoughts profiles, is never cleared or migrated.
 
 Current stats are reconstructed from chat messages, so no extra copy is injected into model context. The original info blocks in messages still occupy their normal context space. The extension does not change your context or regex settings.
 
 **Export** creates a JSON backup of this chat's settings and portraits, including inherited portraits that can be read. Export is cancelled with a visible message if a referenced portrait cannot be read. **Import** replaces settings for the currently open chat after confirmation; it does not edit messages or import another chat's story facts. Shared aliases and display names are materialized into the backup for portability. Character Thoughts profiles themselves are not overwritten.
 
-Both storage methods are browser-local and device-specific and may be cleared by browser cleanup. Export before changing browsers, clearing site data, or reinstalling. Copying the extension folder or updating it does not transfer browser storage. If saving fails, a visible message advises exporting a backup.
+Character Thoughts avatars and names are still read from that extension's existing profiles. Their storage remains under Character Thoughts' control. The Character Stats backup materializes inherited or file-backed images into portable image data, so importing does not depend on the original installation's file paths. Saving failures remain visible, and the current in-memory data remains available for export.
 
 ## Parsing limits
 

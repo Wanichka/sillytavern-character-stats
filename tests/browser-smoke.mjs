@@ -10,6 +10,8 @@ import assert from 'node:assert/strict';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const out = path.join(root, '.test-artifacts');
 await mkdir(out, { recursive: true });
+const diskFiles = new Map();
+let rejectUploads = false;
 const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="data:,"><style>
 :root {--SmartThemeBlurTintColor:#211f17;--SmartThemeBodyColor:#e6dfce;--SmartThemeQuoteColor:#dfb57b;--mainFontFamily:Georgia,serif;--SmartThemeBlurStrength:10;}body{margin:0;background:radial-gradient(ellipse at top left,#3b4834,#141711);min-height:100vh;color:#e6dfce}button{cursor:pointer} [hidden]{display:none!important}
 </style><link rel="stylesheet" href="/scripts/extensions/third-party/sillytavern-character-stats/style.css"></head><body>
@@ -17,11 +19,37 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewp
 window.handlers={};window.emit=(type)=>{for(const cb of handlers[type]||[])cb()};
 window.ctx={chatId:'chat-one',name1:'Алиса',characters:[{avatar:'law.png',name:'Law'}],characterId:0,chat:[{mes:\`<user_stats><basic_info>Алиса's appearance: 19 лет; 172 см; рыжие волосы</basic_info><outfit>Чёрная водолазка; тёмно-зелёный кардиган; клетчатая юбка; ботинки на шнуровке; подвеска-полумесяц.</outfit><inventory>Сумка, телефон, ключи от квартиры, свитер.</inventory><cycle>Day: 8/28, фолликулярная фаза; Pregnancy: No; Risk: None</cycle></user_stats><general_stats><location>Нью-Йорк · Манхэттен\nДом Скандинавии, внутренний сад</location><date>Четверг, 05.11.26</date><time>15:05</time><weather>Ясный осенний день ☀</weather><char_around>Characters around: Камилла (Ло в метро)</char_around></general_stats><char_stats><char_info>Ло: adult ; Камилла: adult</char_info><char_outfit>Outfit = Ло: Тёмная рубашка и джинсы ; Камилла: Джинсовая рубашка</char_outfit><char_notes>State = Ло: В метро по пути на съёмку ; Камилла: Во внутреннем саду</char_notes><char_mood>Mood = Ло: собранный ; Камилла: сосредоточенная</char_mood></char_stats>\`}]};
 window.SillyTavern={getContext:()=>window.ctx};
+window.ctx.getRequestHeaders=()=>({'Content-Type':'application/json','X-CSRF-Token':'test-token'});
 if(!sessionStorage.getItem('cs-test-boot')){localStorage.clear();sessionStorage.setItem('cs-test-boot','1')}localStorage.setItem('ct_profiles_v1',JSON.stringify({p:{name:'Modern AU',aliases:{'Ло':['Law']},displayNames:{'Ло':'Ло Трафальгар'},avatars:{},uploads:{},characters:['Ло']}}));localStorage.setItem('ct_cardmap_v2',JSON.stringify({'card:law.png':'p'}));
+</script><script type="module">
+const base='/scripts/extensions/third-party/sillytavern-character-stats/';
+window.testModules=Promise.all([import(base+'storage.js'),import(base+'file-storage.js'),import('/scripts/utils.js')]).then(([api,files,utils])=>({api,store:files.createFileSettingsStore({fetch:(...args)=>window.fetch(...args),getRequestHeaders:()=>ctx.getRequestHeaders(),hash:utils.getStringHash,legacy:api.createSettingsStore(window)})}));
+window.readPrefs=async()=>{const {api,store}=await testModules;return store.load(api.chatKey(ctx))};
+window.writePrefs=async data=>{const {api,store}=await testModules;return store.save(api.chatKey(ctx),data)};
+window.readPortrait=async name=>{const person=(await readPrefs()).people[name];if(person.image)return person.image;const blob=await fetch('/user/files/'+person.imageFile).then(r=>r.blob());return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(blob)})};
 </script><script type="module" src="/scripts/extensions/third-party/sillytavern-character-stats/index.js"></script></body></html>`;
 const server = http.createServer(async (req, res) => {
     try {
         const pathname = new URL(req.url, 'http://localhost').pathname;
+        if (pathname === '/api/files/upload') {
+            assert.equal(req.headers['x-csrf-token'], 'test-token');
+            if (rejectUploads) { res.writeHead(503); res.end(); return; }
+            const chunks = []; for await (const chunk of req) chunks.push(chunk);
+            const { name, data } = JSON.parse(Buffer.concat(chunks).toString());
+            assert.match(name, /^wani-character-stats-(chat|avatar)-[a-z0-9]+-[a-z0-9]+\.(json|webp|png|jpeg|gif)$/);
+            diskFiles.set(name, Buffer.from(data, 'base64'));
+            res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ path: `/user/files/${name}` })); return;
+        }
+        if (pathname.startsWith('/user/files/')) {
+            const data = diskFiles.get(path.basename(pathname));
+            if (!data) { res.writeHead(404); res.end(); return; }
+            res.setHeader('Content-Type', pathname.endsWith('.json') ? 'application/json' : `image/${path.extname(pathname).slice(1)}`);
+            res.end(data); return;
+        }
+        if (pathname === '/scripts/utils.js') {
+            res.setHeader('Content-Type', 'text/javascript');
+            res.end('export function getStringHash(value,seed=0){let hash=seed;for(const ch of value)hash=(Math.imul(hash,31)+ch.charCodeAt(0))>>>0;return hash}'); return;
+        }
         if (pathname === '/') { res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(html); return; }
         if (pathname === '/script.js') {
             res.setHeader('Content-Type', 'text/javascript');
@@ -64,7 +92,7 @@ try {
     await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 1050, deviceScaleFactor: 1, mobile: false });
     await send('Page.navigate', { url });
     const evaluate = async expression => {
-        const result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+        const result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, replMode: true });
         if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
         return result.result.value;
     };
@@ -105,7 +133,7 @@ try {
     await evaluate(`ctx.chat[0].mes=ctx.chat[0].mes.replace(/<user_stats><inventory>&lt;img[\\s\\S]*$/,'');emit('MESSAGE_EDITED')`);
     await waitFor(`!document.querySelector('.cs-inventory .cs-value')?.textContent.includes('onerror')`);
     await evaluate(`document.querySelector('.cs-birthday-edit').click();document.querySelector('.cs-birthday-input').value='20 июня';document.querySelector('.cs-birthday-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));document.querySelector('.cs-notes-input').value='День рождения: 20 июня.\\nВзять камеру.';document.querySelector('.cs-notes-save').click()`);
-    assert.equal(await evaluate(`document.querySelector('.cs-birthday-edit').textContent`),'20 июня');
+    await waitFor(`document.querySelector('.cs-birthday-edit')?.textContent==='20 июня'`);
     assert.ok(await evaluate(`document.querySelector('.cs-notes-input').value.includes('Взять камеру')`));
     const screenshot = async name => { const result = await send('Page.captureScreenshot', { format: 'png' }); await writeFile(path.join(out, name), Buffer.from(result.data, 'base64')); };
     await screenshot('desktop.png');
@@ -128,12 +156,12 @@ try {
     await evaluate(`document.querySelector('[aria-label="Настройки"]').click()`);
     await waitFor(`!!document.querySelector('.cs-settings')`);
     await evaluate(`var inputs=document.querySelectorAll('.cs-settings input[type=text]');inputs[0].value='Алиса ✦';document.querySelector('.cs-primary').click()`);
-    assert.equal(await evaluate(`JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['@user'].displayName`), 'Алиса ✦');
+    await waitFor(`(await window.readPrefs()).people['@user'].displayName==='Алиса ✦'`);
     // Configure NPC aliases and custom display labels without touching Thoughts.
     await evaluate(`var selects=document.querySelectorAll('.cs-settings select');var who=selects[selects.length-1];who.value='Ло';who.dispatchEvent(new Event('change'))`);
     await evaluate(`var textInputs=document.querySelectorAll('.cs-settings input[type=text]');textInputs[0].value='Капитан';textInputs[1].value='Трафальгар, Captain';document.querySelector('.cs-primary').click()`);
     assert.equal(await evaluate(`JSON.parse(localStorage.getItem('ct_profiles_v1')).p.displayNames['Ло']`), 'Ло Трафальгар');
-    assert.equal(await evaluate(`JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['Ло'].aliases.includes('Captain')`), true);
+    await waitFor(`(await window.readPrefs()).people['Ло']?.aliases.includes('Captain')`);
     // Exercise the actual portrait file picker and canvas upload path.
     const png = process.env.PROFILE_DEMO || path.join(out, 'portrait.png');
     if (!process.env.PROFILE_DEMO) await writeFile(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=', 'base64'));
@@ -148,11 +176,11 @@ try {
     await writeFile(rectangleFixture,Buffer.from(await evaluate(`(()=>{const c=document.createElement('canvas');c.width=200;c.height=300;c.getContext('2d').fillRect(0,0,200,300);return c.toDataURL().split(',')[1]})()`),'base64'));
     await chooseFile(rectangleFixture);
     await waitFor(`document.querySelector('.cs-notice').textContent.includes('квадратная')`);
-    assert.ok(await evaluate(`!JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['Ло'].image`));
+    assert.ok(await evaluate(`!(await window.readPrefs()).people['Ло'].image`));
     await evaluate(`document.querySelector('.cs-setting-actions button:nth-child(2)').click()`);
     await chooseFile(png);
-    await waitFor(`JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['Ло'].image?.startsWith('data:image/')`);
-    if (process.env.PROFILE_DEMO) await writeFile(path.join(out,'demo-avatar.dataurl'), await evaluate(`JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['Ло'].image`));
+    await waitFor(`(await window.readPrefs()).people['Ло'].imageFile?.endsWith('.webp')`);
+    if (process.env.PROFILE_DEMO) await writeFile(path.join(out,'demo-avatar.dataurl'), await evaluate(`await window.readPortrait('Ло')`));
     // Backup download includes the uploaded image; importing restores edited labels.
     const downloads = path.join(out, `downloads-${Date.now()}`); await mkdir(downloads);
     await browserSocket.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
@@ -171,10 +199,10 @@ try {
     assert.equal(savedBackup.settings.people['Ло'].notes,'Знаком с Алисой');
     await evaluate(`document.querySelector('.cs-settings input[type=text]').value='Изменено';document.querySelector('.cs-primary').click();window.confirm=()=>true;[...document.querySelectorAll('.cs-settings button')].find(b=>b.textContent==='Импорт').click()`);
     await chooseFile(exported);
-    await waitFor(`JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['Ло'].displayName==='Капитан'`);
+    await waitFor(`(await window.readPrefs()).people['Ло'].displayName==='Капитан'`);
     // Shared uploaded avatars are used directly, without a second live copy.
-    await evaluate(`var shared=JSON.parse(localStorage.getItem('ct_profiles_v1'));shared.p.uploads['Ло']=JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['Ло'].image;localStorage.setItem('ct_profiles_v1',JSON.stringify(shared));document.querySelectorAll('.cs-setting-actions button')[2].click()`);
-    await waitFor(`!JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['Ло'].image`);
+    await evaluate(`var shared=JSON.parse(localStorage.getItem('ct_profiles_v1'));shared.p.uploads['Ло']=await window.readPortrait('Ло');localStorage.setItem('ct_profiles_v1',JSON.stringify(shared));document.querySelectorAll('.cs-setting-actions button')[2].click()`);
+    await waitFor(`!(await window.readPrefs()).people['Ло'].imageFile`);
     await evaluate(`document.querySelector('[aria-label="Назад"]').click()`);
     await evaluate(`[...document.querySelectorAll('.cs-choice')].find(b=>b.textContent.includes('Капитан')).click()`);
     await waitFor(`!!document.querySelector('.cs-portrait-image img')`);
@@ -205,7 +233,7 @@ try {
     await waitFor(`document.querySelector('.cs-outfit .cs-value')?.textContent.includes('Сапожки')`);
     try {
         const demo = await readFile(path.join(out,'fullbody-avatar.dataurl'),'utf8');
-        await evaluate(`var localKey=Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::'));var saved=JSON.parse(localStorage.getItem(localKey));saved.people['@user'].image=${JSON.stringify(demo.trim())};localStorage.setItem(localKey,JSON.stringify(saved));window.dispatchEvent(new StorageEvent('storage',{key:localKey}))`);
+        await evaluate(`var localKey=(await testModules).api.chatKey(ctx);var saved=await readPrefs();saved.people['@user'].image=${JSON.stringify(demo.trim())};await writePrefs(saved);window.dispatchEvent(new StorageEvent('storage',{key:localKey}))`);
         await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalWidth>200`);
     } catch (error) { if(error.code!=='ENOENT')throw error; }
     await evaluate(`var inherited=document.createElement('style');inherited.id='heading-theme-fixture';inherited.textContent='#cs-panel h3{border-left:3px solid gold!important;box-shadow:inset 3px 0 gold!important}#cs-panel h3::before{content:"";display:block;width:3px;background:gold}';document.head.append(inherited)`);
@@ -263,44 +291,60 @@ try {
         assert.equal(await evaluate(`document.querySelector('#cs-panel').getBoundingClientRect().width>100`), true);
         assert.equal(await evaluate(`document.querySelector('.cs-body').scrollWidth<=document.querySelector('.cs-body').clientWidth+1`), true);
     } catch (error) { if (error.code !== 'ENOENT') throw error; console.log('Host fixtures not present; host integration skipped.'); }
-    // Exhaust only the extension's localStorage writes; other extensions remain intact.
+    // Disk saves work even when localStorage has no free space.
     await evaluate(`localStorage.setItem('other-extension-sentinel','keep');window.originalSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(key,value){if(String(key).startsWith('wani_character_stats_v1::'))throw new DOMException('Simulated full localStorage','QuotaExceededError');return originalSetItem.call(this,key,value)}`);
     await evaluate(`document.querySelector('.cs-birthday-edit').click();document.querySelector('.cs-birthday-input').value='07.11.2001';document.querySelector('.cs-birthday-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))`);
     await waitFor(`document.querySelector('.cs-birthday-edit')?.textContent==='07.11.2001'`);
-    await evaluate(`document.querySelector('.cs-notes-input').value='Резервная запись\\nПосле заполнения localStorage';document.querySelector('.cs-notes-input').dispatchEvent(new Event('input'));document.querySelector('.cs-notes-save').click()`);
+    await evaluate(`document.querySelector('.cs-notes-input').value='Запись на диске';document.querySelector('.cs-notes-input').dispatchEvent(new Event('input'));document.querySelector('.cs-notes-save').click()`);
     await waitFor(`document.querySelector('.cs-notes-status')?.textContent==='Сохранено'`);
-    await evaluate(`document.querySelector('.cs-portrait-edit').click()`);await chooseFile(rectangleFixture);
+    await evaluate(`document.querySelector('.cs-portrait-edit').click()`); await chooseFile(rectangleFixture);
     await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalHeight===300`);
-    const fallbackKey=await evaluate(`(async()=>{window.storageApi=await import('/scripts/extensions/third-party/sillytavern-character-stats/storage.js');return storageApi.chatKey(ctx)})()`);
-    const fallback=await evaluate(`storageApi.createSettingsStore(window).load(${JSON.stringify(fallbackKey)})`);
-    assert.equal(fallback.people['@user'].birthday,'07.11.2001');
-    assert.ok(fallback.people['@user'].notes.includes('Резервная запись'));
-    assert.ok(fallback.people['@user'].image.startsWith('data:image/'));
-    assert.equal(await evaluate(`localStorage.getItem('other-extension-sentinel')`),'keep');
-    assert.ok(await evaluate(`!document.querySelector('.cs-notice').textContent.includes('Не удалось')`));
-    const portable=await evaluate(`(async()=>storageApi.backup(await storageApi.createSettingsStore(window).load(${JSON.stringify(fallbackKey)})))()`);
-    assert.equal(portable.settings.people['@user'].notes,fallback.people['@user'].notes);
-    // Reload creates a fresh store instance; the fallback must win over stale legacy data.
-    await send('Page.reload');await waitFor(`!!document.querySelector('#cs-launcher')`);
+    const savedDisk = await evaluate(`await readPrefs()`);
+    assert.equal(savedDisk.people['@user'].birthday, '07.11.2001');
+    assert.equal(savedDisk.people['@user'].notes, 'Запись на диске');
+    assert.ok(savedDisk.people['@user'].imageFile.endsWith('.webp'));
+    assert.equal(savedDisk.people['@user'].image, '');
+    assert.equal(await evaluate(`localStorage.getItem('other-extension-sentinel')`), 'keep');
+    assert.ok(await evaluate(`!Object.keys(localStorage).some(k=>k.startsWith('wani_character_stats_v1::'))`));
+    // Reload creates new store instances and reads files instead of browser data.
+    await send('Page.reload'); await waitFor(`!!document.querySelector('#cs-launcher')`);
     await evaluate(`document.querySelector('#cs-launcher').click();ctx.chatId='chat-two';emit('CHAT_CHANGED')`);
     await waitFor(`document.querySelector('.cs-birthday-edit')?.textContent==='07.11.2001'`);
-    assert.ok(await evaluate(`document.querySelector('.cs-notes-input').value.includes('Резервная запись')`));
+    assert.equal(await evaluate(`document.querySelector('.cs-notes-input').value`), 'Запись на диске');
     await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalHeight===300`);
-    assert.equal(await evaluate(`localStorage.getItem('other-extension-sentinel')`),'keep');
-    // Once localStorage is writable again, its newer record must beat the old IDB copy.
-    await evaluate(`document.querySelector('.cs-notes-input').value='Новая запись после перезагрузки';document.querySelector('.cs-notes-save').click()`);
-    await waitFor(`document.querySelector('.cs-notes-status')?.textContent==='Сохранено'`);
-    assert.equal(await evaluate(`(async()=>{window.storageApi=await import('/scripts/extensions/third-party/sillytavern-character-stats/storage.js');return (await storageApi.createSettingsStore(window).load(${JSON.stringify(fallbackKey)})).people['@user'].notes})()`),'Новая запись после перезагрузки');
-    // An abort after the put request succeeds must never display Saved.
-    await evaluate(`window.originalSetItem=Storage.prototype.setItem;window.originalPut=IDBObjectStore.prototype.put;Storage.prototype.setItem=function(key,value){if(String(key).startsWith('wani_character_stats_v1::'))throw new DOMException('Simulated full storage','QuotaExceededError');return originalSetItem.call(this,key,value)};IDBObjectStore.prototype.put=function(...args){const request=originalPut.apply(this,args);if(this.transaction.db.name==='wani_character_stats_v1')request.addEventListener('success',()=>this.transaction.abort());return request};document.querySelector('.cs-notes-input').value='Повтор после ошибки';document.querySelector('.cs-notes-input').dispatchEvent(new Event('input'));document.querySelector('.cs-notes-save').click()`);
-    await waitFor(`document.querySelector('.cs-notice').textContent.includes('резервное сохранение')`);
-    assert.notEqual(await evaluate(`document.querySelector('.cs-notes-status').textContent`),'Сохранено');
-    await evaluate(`Storage.prototype.setItem=originalSetItem;IDBObjectStore.prototype.put=originalPut;document.querySelector('.cs-notes-save').click()`);
+    // Server failures never show Saved; retry uses the same in-memory text.
+    rejectUploads = true;
+    await evaluate(`document.querySelector('.cs-notes-input').value='Повтор после ошибки';document.querySelector('.cs-notes-input').dispatchEvent(new Event('input'));document.querySelector('.cs-notes-save').click()`);
+    await waitFor(`document.querySelector('.cs-notice').textContent.includes('Не удалось подтвердить')`);
+    assert.notEqual(await evaluate(`document.querySelector('.cs-notes-status').textContent`), 'Сохранено');
+    assert.equal((await evaluate(`await readPrefs()`)).people['@user'].notes, 'Запись на диске');
+    rejectUploads = false;
+    await evaluate(`document.querySelector('.cs-notes-save').click()`);
     await waitFor(`document.querySelector('.cs-notes-status').textContent==='Сохранено'&&document.querySelector('.cs-notice').hidden`);
-    // IndexedDB also works if browser policy blocks localStorage reads as well as writes.
-    const policyNotes=await evaluate(`(async()=>{const blocked=()=>{throw new DOMException('Blocked','SecurityError')};const store=storageApi.createSettingsStore({localStorage:{getItem:blocked,setItem:blocked},indexedDB});const data=storageApi.defaults();data.people.A={notes:'Policy fallback'};await store.save('policy-fixture',data);return (await store.load('policy-fixture')).people.A.notes})()`);
-    assert.equal(policyNotes,'Policy fallback');
-    console.log('Storage regression passed: quota fallback, committed save, portrait/notes/birth date after reload, newest-copy selection, no deletion, policy fallback, aborted-write failure and retry.');
+    // Both legacy stores migrate; unrelated extensions and failed migrations survive intact.
+    await evaluate(`window.storageApi=(await testModules).api;window.oldLocalKey=storageApi.chatKey({...ctx,chatId:'legacy-local'});window.oldDbKey=storageApi.chatKey({...ctx,chatId:'legacy-idb'});var old=await readPrefs();old.people['@user'].image=await readPortrait('@user');old.people['@user'].imageFile='';old.people['@user'].notes='Legacy local';localStorage.setItem(oldLocalKey,JSON.stringify(old));await new Promise((resolve,reject)=>{var request=indexedDB.open(storageApi.PREFIX,1);request.onsuccess=()=>{var db=request.result;var tx=db.transaction('chats','readwrite');old.people['@user'].notes='Legacy IDB';tx.objectStore('chats').put(old,oldDbKey);tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>reject(tx.error)}});document.querySelector('[aria-label="Настройки"]').click()`);
+    await waitFor(`!!document.querySelector('.cs-settings')`);
+    rejectUploads = true;
+    await evaluate(`[...document.querySelectorAll('.cs-settings button')].find(b=>b.textContent==='Перенести остальные чаты из браузера').click()`);
+    await waitFor(`document.querySelector('.cs-notice').textContent.includes('Не удалось подтвердить')`);
+    assert.ok(await evaluate(`!!localStorage.getItem(oldLocalKey)`));
+    rejectUploads = false;
+    await evaluate(`[...document.querySelectorAll('.cs-settings button')].find(b=>b.textContent==='Перенести остальные чаты из браузера').click()`);
+    await waitFor(`document.querySelector('.cs-notice').textContent.includes('Перенесено профилей: 2')`);
+    assert.equal(await evaluate(`localStorage.getItem(oldLocalKey)`), null);
+    assert.equal(await evaluate(`localStorage.getItem('other-extension-sentinel')`), 'keep');
+    assert.equal(await evaluate(`(await storageApi.createSettingsStore(window).load(oldDbKey)).people['@user']`), undefined);
+    await evaluate(`ctx.chatId='legacy-local';emit('CHAT_CHANGED')`);
+    await waitFor(`document.querySelector('.cs-notes-input')?.value==='Legacy local'`);
+    await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalHeight===300`);
+    await evaluate(`ctx.chatId='legacy-idb';emit('CHAT_CHANGED')`);
+    await waitFor(`document.querySelector('.cs-notes-input')?.value==='Legacy IDB'`);
+    // Current-chat migration also runs automatically on opening it.
+    await evaluate(`var autoKey=storageApi.chatKey({...ctx,chatId:'legacy-auto'});var auto=storageApi.defaults();auto.people['@user']={birthday:'20 июня',notes:'Automatic migration'};localStorage.setItem(autoKey,JSON.stringify(auto));ctx.chatId='legacy-auto';emit('CHAT_CHANGED')`);
+    await waitFor(`document.querySelector('.cs-notes-input')?.value==='Automatic migration'`);
+    assert.equal(await evaluate(`localStorage.getItem(autoKey)`), null);
+    assert.equal(await evaluate(`document.querySelector('.cs-birthday-edit').textContent`), '20 июня');
+    console.log('File storage passed: separate portraits, quota independence, reload, failed-save retry, automatic and bulk migration from localStorage/IndexedDB, verified cleanup, untouched other extensions.');
 
     assert.deepEqual(connection.errors, []);
     console.log('Browser checks passed: user/NPC fields, aliases, themes, swipe/delete rollback, chat isolation, mobile and optional Roleplay Tools docking.');
