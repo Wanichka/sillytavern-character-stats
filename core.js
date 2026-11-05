@@ -1,5 +1,5 @@
 // Pure parsing and history replay. No prompt injection, network or DOM access.
-export const FIELDS = ['outfit', 'inventory', 'cycle', 'state', 'location', 'date', 'time', 'weather'];
+export const FIELDS = ['age', 'appearance', 'outfit', 'inventory', 'cycle', 'state', 'notes', 'location', 'date', 'time', 'weather'];
 export const clean = value => String(value ?? '').replace(/[\u3164\uFFA0\u00a0]/g, ' ').replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
 export const nameKey = value => clean(value).normalize('NFKC').replace(/\s+/g, ' ').toLocaleLowerCase();
 const own = (object, key) => Object.hasOwn(object || {}, key);
@@ -56,6 +56,7 @@ export function parseMessage(raw, knownNames = []) {
         const info = block(user, 'basic_info');
         const name = info?.match(/^(.+?)(?:['’]s\s+appearance|\s*:\s*(?:appearance|внешность))\s*:/i);
         if (name) result.name = clean(name[1]);
+        if (info !== null) result.user.info = name ? clean(info.slice(name[0].length)) : info;
     }
     if (general !== null) {
         for (const field of ['location', 'date', 'time', 'weather']) {
@@ -82,6 +83,11 @@ export function parseMessage(raw, knownNames = []) {
         result.characters = [...people.values()];
     }
     return result;
+}
+
+// Only explicit age units count; height/weight and story dates are not ages.
+export function ageFromInfo(value) {
+    return clean(value).match(/(?:^|[;:,])\s*(?:age\s*[:=]?\s*)?(\d{1,4}(?:[.,]\d+)?\s*(?:лет|года?|years?(?:\s+old)?|y\.?o\.?))(?=\s|[;,.()]|$)/i)?.[1] || '';
 }
 
 export function presenceFor(name, raw, settings = {}, profile = {}) {
@@ -144,7 +150,7 @@ export function validateAliases(owner, aliases, settings, profile, roster = []) 
         if (nameKey(resolveOwner(other, settings, profile)) === nameKey(owner)) continue;
         const names = [other, ...(settings.people?.[other]?.aliases || []), ...(profile.aliases?.[other] || [])];
         const configured = settings.people?.[other];
-        const hasAssignment = configured?.image || configured?.displayName || configured?.aliases?.length
+        const hasAssignment = configured?.image || configured?.displayName || configured?.aliases?.length || configured?.age || configured?.notes
             || profile.uploads?.[other] || profile.avatars?.[other] || profile.displayNames?.[other] || profile.aliases?.[other]?.length;
         // A bare observed duplicate may be merged; configured identities cannot.
         if (hasAssignment && names.some(name => claimed.has(nameKey(name)))) return other;

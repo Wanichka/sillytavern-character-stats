@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clean, nameKey, parseMessage, namedSegments, replay, cycleDetails, resolveOwner, validateAliases } from '../core.js';
+import { clean, nameKey, parseMessage, namedSegments, replay, cycleDetails, resolveOwner, validateAliases, ageFromInfo } from '../core.js';
 import { chatKey, loadSettings, sharedProfile, backup, importBackup, defaults } from '../storage.js';
 
 const assistant = mes => ({ mes });
@@ -12,7 +12,8 @@ const memory = data => ({ getItem: key => data[key] || null });
 test('reads only selected fields, scoped to their parent blocks', () => {
     const result = parseMessage(user(`<basic_info>Алиса's appearance: 25 лет; рыжая</basic_info><outfit>Кардиган; аксессуары: кольцо</outfit><inventory>Сумка, телефон</inventory><cycle>Day: 8/28, phase; Pregnancy: No; Risk: None</cycle><user_notes>ignored</user_notes>`) + general('<location>Сад</location><time>15:05</time>') + '<outfit>outside user block</outfit>');
     assert.equal(result.name, 'Алиса'); assert.equal(result.user.outfit, 'Кардиган; аксессуары: кольцо');
-    assert.deepEqual(Object.keys(result.user), ['outfit', 'inventory', 'cycle']);
+    assert.deepEqual(Object.keys(result.user), ['outfit', 'inventory', 'cycle', 'info']);
+    assert.equal(result.user.info, '25 лет; рыжая');
     assert.equal(result.scene.time, '15:05'); assert.equal(result.scene.location, 'Сад');
 });
 test('normalizes Hangul filler spaces and supports multiple NPCs without losing description semicolons', () => {
@@ -109,4 +110,30 @@ test('literal hostile character names remain ordinary dictionary keys', () => {
 });
 test('a semicolon without a new name remains in the same description', () => {
     assert.deepEqual(namedSegments('Outfit = A: coat; hat ; B: boots'), [{ name: 'A', text: 'coat; hat' }, { name: 'B', text: 'boots' }]);
+});
+
+test('appearance is replayed from basic_info and removed with its source message', () => {
+    const first = assistant(user("<basic_info>User's appearance: 21 years old; 175 cm; brown eyes</basic_info>"));
+    const second = assistant(user('<basic_info>Age: 22 years; 175 cm</basic_info>'));
+    assert.equal(replay([first]).user.fields.info.value, '21 years old; 175 cm; brown eyes');
+    assert.equal(ageFromInfo(replay([first, second]).user.fields.info.value), '22 years');
+    assert.equal(ageFromInfo(replay([first]).user.fields.info.value), '21 years old');
+    assert.equal(replay([]).user.fields.info, undefined);
+    assert.equal(replay([first, assistant(user('<basic_info></basic_info>'))]).user.fields.info.value, '');
+});
+
+test('age requires an explicit age unit and does not mistake height or dates for age', () => {
+    for (const [info, age] of [['19 лет; 191 см', '19 лет'], ['32 года; высокий', '32 года'], ['Age: 25 years old; hair', '25 years old'], ['age = 19 yo; eyes', '19 yo']]) assert.equal(ageFromInfo(info), age);
+    for (const info of ['172 см; 48 кг', 'Birthday: 20.06.2000', 'tall; 19 tattoos', 'unknown']) assert.equal(ageFromInfo(info), '');
+});
+
+test('manual age and multiline notes survive backups and remain chat-local', () => {
+    const settings = defaults();
+    settings.people.A = { age: '22 года', notes: 'День рождения: 20 июня.\nЗнаком с B.' };
+    const restored = importBackup(JSON.parse(JSON.stringify(backup(settings))));
+    assert.equal(restored.people.A.age, '22 года'); assert.equal(restored.people.A.notes, settings.people.A.notes);
+    assert.equal(validateAliases('B', ['A'], restored, {}, ['A', 'B']), 'A');
+    assert.equal(loadSettings(memory({}), 'another-chat').people.A, undefined);
+    const invalid = importBackup({ format: 'wani-character-stats', version: 1, settings: { people: { A: { age: 24, notes: { text: 'ignored' } } } } });
+    assert.equal(invalid.people.A.age, ''); assert.equal(invalid.people.A.notes, '');
 });

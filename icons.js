@@ -1,0 +1,20 @@
+// Lucide SVG files are bundled locally. See assets/icons/LICENSE.
+export const ICON_FILES = {
+    shirt: './assets/icons/shirt.svg',
+    'bag-shopping': './assets/icons/shopping-bag.svg',
+    sparkle: './assets/icons/sparkle.svg',
+    'book-open': './assets/icons/book-open.svg',
+    'clipboard-list': './assets/icons/clipboard-list.svg',
+    'feather-pointed': './assets/icons/clipboard-list.svg',
+    'location-dot': './assets/icons/map-pin.svg',
+    'calendar-days': './assets/icons/calendar-days.svg',
+    clock: './assets/icons/clock.svg',
+    'cloud-sun': './assets/icons/cloud-sun.svg',
+    image: './assets/icons/image.svg',
+    eraser: './assets/icons/eraser.svg',
+    'rotate-right': './assets/icons/refresh-cw.svg',
+    sliders: './assets/icons/sliders-horizontal.svg',
+    xmark: './assets/icons/x.svg',
+    'id-card': './assets/icons/contact-round.svg',
+    'chevron-down': './assets/icons/chevron-down.svg',
+};

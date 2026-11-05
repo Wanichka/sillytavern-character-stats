@@ -4,23 +4,20 @@ A theme-aware SillyTavern extension for viewing the user's and NPCs' current sta
 
 ## Features
 
-- Switch between the user and NPCs using a compact header picker. Its dropdown contains **In scene** and **All characters** filters.
-- Keep a persistent character roster for each chat, including characters who have left the scene.
-- Show the user's outfit, inventory, cycle, and location.
-- Show NPC outfits, mood subtitles, and current state from `char_notes`.
-- Keep the scene's date, time, and weather visible when switching characters.
-- Display outfit descriptions as text, without requiring fixed clothing categories.
-- Upload portraits without cropping. The frame follows the image's proportions, including square avatars.
+- A compact header picker with **In scene** and **All characters** filters and a persistent per-chat roster.
+- The approved profile layout: portrait and personal details at the top, followed by full-width scene sections.
+- A fixed **2:3 user portrait**. Images fill the frame with proportional cropping from the top; square images no longer change the frame's shape.
+- **Square NPC portraits**. New non-square NPC uploads are rejected without replacing the previous portrait. Existing inherited portraits continue to use the square frame.
+- Name, a fine divider with a small diamond, and an editable age directly below it.
+- User appearance from `basic_info`, followed by free-text outfit and inventory beside the portrait.
+- NPC appearance from `char_info`, followed by full-width outfit and current state sections.
+- An always-visible **Notes** block: below NPC current state, or below the user's personal details. Notes are edited directly in the block and saved separately for each character in each chat.
+- User cycle and location sections across the full panel width, then three matching cards for date, time, and weather.
+- Scene date, time, and weather are shown as supplied, including long weather descriptions. No extra time-of-day label is invented.
 - Reuse Character Thoughts avatars, aliases, and display names, with optional per-chat overrides.
-- Configure visible sections in settings; the main view has no section collapse buttons.
-- Follow SillyTavern's current colors, including light themes, with one consistent Times New Roman font family.
-- Use a simple underlined name heading and theme-colored filigree corners on the portrait frame.
-- Let sections flow beside and below the portrait without a fixed two-column row. Tall portraits are reduced proportionally to a 300-pixel image height without cropping.
-- Replace portraits with a small image overlay; remove local portraits in settings. No button panel is added below the image.
-- Match the cycle and location sections while keeping outfit and inventory cards distinct. Date, time, and weather appear as compact icon-and-value entries below the content.
-- Localize the cycle heading and standard pregnancy/risk values in the Russian interface.
-- Russian and English interface.
-- Export and import per-chat settings and portrait backups.
+- Choose visible sections in settings; no section collapse buttons clutter the main view.
+- SillyTavern theme colors, one Times New Roman font family, and locally bundled SVG icons.
+- Standalone and Roleplay Tools docking modes, Russian and English interfaces, and per-chat JSON backups.
 
 ## Installation
 
@@ -42,12 +39,12 @@ The extension reads existing assistant-message info blocks. It does not create s
 
 | View | Source | Display |
 | --- | --- | --- |
-| User | `user_stats/basic_info` | Name, when the value begins with `Name's appearance:` |
+| User | `user_stats/basic_info` | Appearance; name when prefixed with `Name's appearance:`; explicit age when present |
 | User | `user_stats/outfit` | Outfit description |
 | User | `user_stats/inventory` | Inventory description |
 | User | `user_stats/cycle` | Cycle or pregnancy status |
 | User | `general_stats/location` | Current scene location |
-| NPC | `char_stats/char_info` | Character discovery and name boundaries |
+| NPC | `char_stats/char_info` | Appearance, explicit age, character discovery, and name boundaries |
 | NPC | `char_stats/char_outfit` | Outfit description |
 | NPC | `char_stats/char_notes` | Current state, including location when supplied |
 | NPC | `char_stats/char_mood` | Mood subtitle |
@@ -98,7 +95,7 @@ Cycles support `Day: X/Y, phase (effects); Pregnancy: X; Risk: X`. Pregnancies s
 
 ## Portraits, aliases, and Character Thoughts
 
-Open **Settings** to select a character, enter a display name, add comma-separated alternate names, or assign a portrait. The image button below the portrait also accepts a local PNG, JPEG, WebP, or GIF. Uploaded images are resized to a maximum edge of 1,200 pixels and stored as a still image; their aspect ratio and framing are preserved.
+Open **Settings** to select a character, enter a display name, add comma-separated alternate names, or assign a portrait. The image overlay on the portrait accepts PNG, JPEG, WebP, or GIF. Uploads are stored as still WebP images with a maximum edge of 1,200 pixels. The user frame stays 2:3 and proportionally crops the displayed image from the top; the stored image is not cropped. NPC uploads must be square. There is no layout change when image proportions change.
 
 **Use Character Thoughts avatars and names** is enabled by default. The extension reads the existing `ct_profiles_v1` and `ct_cardmap_v2` browser records:
 
@@ -111,9 +108,17 @@ Open **Settings** to select a character, enter a display name, add comma-separat
 
 For folder-based avatars, install Character Thoughts as the sibling extension `sillytavern-character-thoughts`. Both `<folder>/<file>` and its legacy `avatars/<folder>/<file>` layout are supported. Renamed installation directories require restoring that folder name or using uploaded/local portraits. If no usable image exists, the portrait shows the character's initial.
 
+## Manual age and notes
+
+Click the age below the name to edit it. A manual value overrides the age for that character in this chat. Leave it blank to use an explicit age from `basic_info` or `char_info` (for example, `19 лет` or `19 years old`). Height, weight, dates, and narrative prose are not used to infer an age. The appearance text itself stays unchanged.
+
+Write personal information directly in **Notes** and press **Save**. Each character, including the user, has their own notes in the current chat (up to 2,000 characters). Line breaks are preserved and text is never treated as HTML. Manual notes are independent of the automatically parsed NPC current state, so a new reply does not overwrite them.
+
+Age and notes are included in backups. Neither is injected into the model prompt. You can hide either section in the visibility settings.
+
 ## Storage and backups
 
-Character Stats stores per-chat UI data in this browser's `localStorage`, under `wani_character_stats_v1::<card-or-group>::<chat-id>`. This includes the saved roster, selected character, filters, visible sections, language, aliases, display names, portrait overrides, and optional shared-set selection. Matching chat names on different cards do not share data.
+Character Stats stores per-chat UI data in this browser's `localStorage`, under `wani_character_stats_v1::<card-or-group>::<chat-id>`. This includes the saved roster, selected character, filters, visible sections, language, aliases, display names, portrait overrides, manual ages, personal notes, and optional shared-set selection. Matching chat names on different cards do not share data.
 
 Current stats are reconstructed from chat messages, so no extra copy is injected into model context. The original info blocks in messages still occupy their normal context space. The extension does not change your context or regex settings.
 
@@ -149,3 +154,5 @@ On Windows it uses the standard Google Chrome path. Set `CHROME_PATH` for anothe
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+The locally bundled interface icons are from [Lucide](https://github.com/lucide-icons/lucide), used under the [ISC license](assets/icons/LICENSE). The preview and extension use the same SVG files; no icon font or icon-library network request is required.

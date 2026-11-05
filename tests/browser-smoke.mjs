@@ -30,6 +30,7 @@ const server = http.createServer(async (req, res) => {
         let file;
         if (pathname === '/host.js' || pathname === '/host.css') file = path.join(out, pathname.slice(1));
         else if (pathname === '/scripts/extensions/third-party/sillytavern-character-stats/assets/filigree.svg') file = path.join(root,'assets','filigree.svg');
+        else if (/^\/scripts\/extensions\/third-party\/sillytavern-character-stats\/assets\/icons\/[a-z-]+\.svg$/.test(pathname)) file = path.join(root,'assets','icons',path.basename(pathname));
         else if (pathname.startsWith('/scripts/extensions/third-party/sillytavern-character-stats/')) file = path.join(root, path.basename(pathname));
         else { res.writeHead(404); res.end(); return; }
         res.setHeader('Content-Type', file.endsWith('.css') ? 'text/css' : file.endsWith('.svg') ? 'image/svg+xml' : 'text/javascript'); res.end(await readFile(file));
@@ -78,14 +79,17 @@ try {
     assert.equal(await evaluate(`!!document.querySelector('.cs-layout .cs-state')`), false);
     assert.equal(await evaluate(`!!document.querySelector('.cs-ornament')||!!document.querySelector('.cs-scene-label')`), false);
     assert.ok((await evaluate(`getComputedStyle(document.querySelector('.cs-person-heading h2')).fontFamily`)).includes('Times New Roman'));
-    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.cs-person-heading')).borderBottomStyle`), 'solid');
+    assert.equal(await evaluate(`document.querySelectorAll('.cs-name-divider > i').length`), 1);
+    assert.ok(await evaluate(`document.querySelector('.cs-cycle').getBoundingClientRect().width>=document.querySelector('.cs-upper').getBoundingClientRect().width-1`));
+    assert.ok(await evaluate(`!!document.querySelector('.cs-notes').closest('.cs-layout')`));
+    assert.ok(await evaluate(`document.querySelector('.cs-user .cs-portrait-image').clientHeight/document.querySelector('.cs-user .cs-portrait-image').clientWidth>1.49`));
     assert.equal(await evaluate(`getComputedStyle(document.querySelector('.cs-cycle')).background`), await evaluate(`getComputedStyle(document.querySelector('.cs-location')).background`));
     assert.notEqual(await evaluate(`getComputedStyle(document.querySelector('.cs-cycle-phase')).color`), await evaluate(`getComputedStyle(document.querySelector('.cs-cycle-top')).color`));
     assert.equal(await evaluate(`new Set(['date','time','weather'].map(field=>{const style=getComputedStyle(document.querySelector('.cs-'+field+' .cs-value'));return [style.fontFamily,style.fontSize,style.fontWeight,style.color].join('|')})).size`), 1);
     assert.equal(await evaluate(`document.querySelector('.cs-cycle h3').textContent`), 'Статус цикла');
     assert.equal(await evaluate(`new Set([...document.querySelectorAll('.cs-person-heading h2,.cs-card h3,.cs-value,.cs-picker-trigger')].map(node=>getComputedStyle(node).fontFamily)).size`), 1);
     assert.equal(await evaluate(`!!document.querySelector('.cs-portrait-actions')`), false);
-    assert.equal(await evaluate(`document.querySelector('.cs-title-wrap i').className===document.querySelector('.cs-cycle h3 i').className`), false);
+    assert.equal(await evaluate(`document.querySelector('.cs-title-wrap .cs-icon').dataset.icon===document.querySelector('.cs-cycle h3 .cs-icon').dataset.icon`), false);
     assert.equal(await evaluate(`!!document.querySelector('.cs-switcher')`), false);
     await evaluate(`document.querySelector('.cs-picker-trigger').click()`);
     assert.equal(await evaluate(`document.querySelector('.cs-picker-trigger').getAttribute('aria-expanded')`), 'true');
@@ -98,13 +102,21 @@ try {
     assert.equal(await evaluate(`document.querySelectorAll('.cs-inventory img').length`), 0);
     await evaluate(`ctx.chat[0].mes=ctx.chat[0].mes.replace(/<user_stats><inventory>&lt;img[\\s\\S]*$/,'');emit('MESSAGE_EDITED')`);
     await waitFor(`!document.querySelector('.cs-inventory .cs-value')?.textContent.includes('onerror')`);
+    await evaluate(`document.querySelector('.cs-age-edit').click();document.querySelector('.cs-age-input').value='24 года';document.querySelector('.cs-age-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));document.querySelector('.cs-notes-input').value='День рождения: 20 июня.\\nВзять камеру.';document.querySelector('.cs-notes-save').click()`);
+    assert.equal(await evaluate(`document.querySelector('.cs-age-edit').textContent`),'24 года');
+    assert.ok(await evaluate(`document.querySelector('.cs-notes-input').value.includes('Взять камеру')`));
     const screenshot = async name => { const result = await send('Page.captureScreenshot', { format: 'png' }); await writeFile(path.join(out, name), Buffer.from(result.data, 'base64')); };
     await screenshot('desktop.png');
     await evaluate(`document.querySelectorAll('.cs-filter button')[1].click(); [...document.querySelectorAll('.cs-choice')].find(b=>b.textContent.includes('Ло Трафальгар')).click()`);
     assert.equal(await evaluate(`document.querySelector('.cs-state .cs-value').textContent`), 'В метро по пути на съёмку');
     assert.equal(await evaluate(`!!document.querySelector('.cs-inventory')||!!document.querySelector('.cs-cycle')||!!document.querySelector('.cs-location')`), false);
     assert.equal(await evaluate(`document.querySelector('.cs-presence').textContent`), 'Вне сцены');
+    assert.ok((await evaluate(`document.querySelector('.cs-appearance .cs-value').textContent`)).includes('adult'));
+    assert.equal(await evaluate(`document.querySelector('.cs-appearance h3').textContent`), 'Внешность');
     assert.ok(await evaluate(`document.querySelector('.cs-state').getBoundingClientRect().top-document.querySelector('.cs-outfit').getBoundingClientRect().bottom<=12`), 'NPC state follows outfit without a separate empty grid row');
+    assert.equal(await evaluate(`document.querySelector('.cs-state').nextElementSibling.classList.contains('cs-notes')`),true);
+    assert.equal(await evaluate(`document.querySelector('.cs-notes-input').value`),'');
+    await evaluate(`document.querySelector('.cs-notes-input').value='Знаком с Алисой';document.querySelector('.cs-notes-save').click()`);
     await screenshot('npc.png');
     // Theme changes are live, including contrast on a light theme.
     await evaluate(`document.documentElement.style.setProperty('--SmartThemeBlurTintColor','#f4efe3');document.documentElement.style.setProperty('--SmartThemeBodyColor','#29251d');document.documentElement.style.setProperty('--SmartThemeQuoteColor','#80572a')`);
@@ -121,8 +133,8 @@ try {
     assert.equal(await evaluate(`JSON.parse(localStorage.getItem('ct_profiles_v1')).p.displayNames['Ло']`), 'Ло Трафальгар');
     assert.equal(await evaluate(`JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['Ло'].aliases.includes('Captain')`), true);
     // Exercise the actual portrait file picker and canvas upload path.
-    const png = path.join(out, 'portrait.png');
-    await writeFile(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=', 'base64'));
+    const png = process.env.PROFILE_DEMO || path.join(out, 'portrait.png');
+    if (!process.env.PROFILE_DEMO) await writeFile(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=', 'base64'));
     await evaluate(`window.realClick=HTMLInputElement.prototype.click;HTMLInputElement.prototype.click=function(){if(this.type==='file')window.testFileInput=this;else window.realClick.call(this)};document.querySelector('.cs-setting-actions button:nth-child(2)').click()`);
     async function chooseFile(file) {
         const document = await send('DOM.getDocument');
@@ -130,8 +142,15 @@ try {
         assert.ok(nodeId);
         await send('DOM.setFileInputFiles', { nodeId, files: [file] });
     }
+    const rectangleFixture = path.join(out, 'rectangle-fixture.png');
+    await writeFile(rectangleFixture,Buffer.from(await evaluate(`(()=>{const c=document.createElement('canvas');c.width=200;c.height=300;c.getContext('2d').fillRect(0,0,200,300);return c.toDataURL().split(',')[1]})()`),'base64'));
+    await chooseFile(rectangleFixture);
+    await waitFor(`document.querySelector('.cs-notice').textContent.includes('квадратная')`);
+    assert.ok(await evaluate(`!JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['Ло'].image`));
+    await evaluate(`document.querySelector('.cs-setting-actions button:nth-child(2)').click()`);
     await chooseFile(png);
     await waitFor(`JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['Ло'].image?.startsWith('data:image/')`);
+    if (process.env.PROFILE_DEMO) await writeFile(path.join(out,'demo-avatar.dataurl'), await evaluate(`JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['Ло'].image`));
     // Backup download includes the uploaded image; importing restores edited labels.
     const downloads = path.join(out, `downloads-${Date.now()}`); await mkdir(downloads);
     await browserSocket.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads });
@@ -145,6 +164,9 @@ try {
     const savedBackup = JSON.parse(await readFile(exported, 'utf8'));
     assert.ok(savedBackup.settings.people['Ло'].image.startsWith('data:image/'));
     assert.equal(savedBackup.settings.people['@user'].displayName, 'Алиса ✦');
+    assert.equal(savedBackup.settings.people['@user'].age, '24 года');
+    assert.ok(savedBackup.settings.people['@user'].notes.includes('Взять камеру'));
+    assert.equal(savedBackup.settings.people['Ло'].notes,'Знаком с Алисой');
     await evaluate(`document.querySelector('.cs-settings input[type=text]').value='Изменено';document.querySelector('.cs-primary').click();window.confirm=()=>true;[...document.querySelectorAll('.cs-settings button')].find(b=>b.textContent==='Импорт').click()`);
     await chooseFile(exported);
     await waitFor(`JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::')))).people['Ло'].displayName==='Капитан'`);
@@ -160,15 +182,21 @@ try {
     assert.equal(await evaluate(`document.querySelector('.cs-portrait-image img').src===JSON.parse(localStorage.getItem('ct_profiles_v1')).p.uploads['Ло']`), true);
     await evaluate(`var tall=document.createElement('canvas');tall.width=10;tall.height=30;tall.getContext('2d').fillRect(0,0,10,30);var shared=JSON.parse(localStorage.getItem('ct_profiles_v1'));shared.p.uploads['Ло']=tall.toDataURL();localStorage.setItem('ct_profiles_v1',JSON.stringify(shared));document.querySelector('[aria-label="Обновить данные"]').click()`);
     await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalHeight===30`);
-    assert.ok(await evaluate(`Math.abs(document.querySelector('.cs-portrait-image').clientHeight/document.querySelector('.cs-portrait-image').clientWidth-3)<.03`), 'Tall portrait keeps its native aspect ratio');
+    assert.ok(await evaluate(`Math.abs(document.querySelector('.cs-portrait-image').clientHeight-document.querySelector('.cs-portrait-image').clientWidth)<2`), 'The review layout keeps a square frame regardless of source proportions');
     for (const height of [100,125,139,140,141,175,300]) {
         await evaluate(`var portrait=document.createElement('canvas');portrait.width=100;portrait.height=${height};portrait.getContext('2d').fillRect(0,0,100,${height});var shared=JSON.parse(localStorage.getItem('ct_profiles_v1'));shared.p.uploads['Ло']=portrait.toDataURL();localStorage.setItem('ct_profiles_v1',JSON.stringify(shared));document.querySelector('[aria-label="Обновить данные"]').click()`);
         await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalHeight===${height}`);
         assert.ok(await evaluate(`[...document.querySelectorAll('.cs-layout .cs-card')].every(node=>{const box=node.getBoundingClientRect(),outer=document.querySelector('.cs-layout').getBoundingClientRect();return box.left>=outer.left-1&&box.right<=outer.right+1})`), `Portrait ratio ${height}/100 does not push data outside the layout`);
         assert.ok(await evaluate(`document.querySelector('.cs-state').getBoundingClientRect().top-document.querySelector('.cs-outfit').getBoundingClientRect().bottom<=12`), 'State spacing stays compact for every portrait ratio');
-        assert.ok(await evaluate(`document.querySelector('.cs-portrait-image img').getBoundingClientRect().height<=302`), 'Tall portraits stay bounded without cropping');
+        assert.ok(await evaluate(`document.querySelector('.cs-portrait-image img').getBoundingClientRect().height<=302`), 'The fixed square NPC frame stays bounded');
     }
     await evaluate(`document.querySelector('.cs-choice').click()`);
+    await evaluate(`document.querySelector('.cs-portrait-edit').click()`);
+    await chooseFile(rectangleFixture);
+    await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalHeight===300`);
+    assert.ok(await evaluate(`Math.abs(document.querySelector('.cs-portrait-image').clientWidth/document.querySelector('.cs-portrait-image').clientHeight-2/3)<.01`));
+    assert.ok(await evaluate(`getComputedStyle(document.querySelector('.cs-portrait-image img')).objectFit==='cover'`));
+    await screenshot('user-portrait.png');
     // Changing a swipe removes old scene fields and updates the selected outfit.
     await evaluate(`ctx.chat[0].mes='<user_stats><outfit>Новое платье</outfit></user_stats>';emit('MESSAGE_SWIPED')`);
     await waitFor(`document.querySelector('.cs-outfit .cs-value')?.textContent==='Новое платье'`);
@@ -178,6 +206,13 @@ try {
     await evaluate(`ctx.chatId='chat-two';emit('CHAT_CHANGED')`);
     await waitFor(`document.querySelector('.cs-person-heading h2')?.textContent==='Алиса'`);
     assert.equal(await evaluate(`document.querySelectorAll('.cs-choice').length`), 1);
+    assert.equal(await evaluate(`document.querySelector('.cs-notes-input').value`),'');
+    assert.equal(await evaluate(`document.querySelector('.cs-age-edit').textContent`),'Указать');
+    await evaluate(`ctx.chatId='chat-one';emit('CHAT_CHANGED')`);
+    await waitFor(`document.querySelector('.cs-age-edit')?.textContent==='24 года'`);
+    assert.ok(await evaluate(`document.querySelector('.cs-notes-input').value.includes('Взять камеру')`));
+    await evaluate(`ctx.chatId='chat-two';emit('CHAT_CHANGED')`);
+    await waitFor(`document.querySelector('.cs-age-edit')?.textContent==='Указать'`);
     await evaluate(`ctx.chat[0]={mes:'<user_stats><outfit>Кардиган и клетчатая юбка</outfit><inventory>Сумка, телефон, ключи</inventory><cycle>Day: 8/28, текущая фаза; Pregnancy: No; Risk: None</cycle></user_stats><general_stats><location>Внутренний сад</location><date>Чт, 05.11.26</date><time>15:05</time><weather>Ясно ☀</weather></general_stats>'};emit('MESSAGE_RECEIVED')`);
     await waitFor(`document.querySelector('.cs-time .cs-value')?.textContent==='15:05'`);
     // Mobile remains reachable without page-level horizontal scrolling.

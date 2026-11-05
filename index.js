@@ -1,11 +1,12 @@
 import { eventSource, event_types } from '../../../../script.js';
-import { FIELDS, clean, nameKey, resolveOwner, displayName, replay, cycleDetails, validateAliases } from './core.js';
+import { FIELDS, clean, nameKey, resolveOwner, displayName, replay, cycleDetails, validateAliases, ageFromInfo } from './core.js';
 import { defaults, chatKey, loadSettings, readJSON, sharedProfile, backup, importBackup, safeImage } from './storage.js';
 import { registerRoleplayPanel, isRoleplayDocked } from './roleplay-tools-adapter.js';
+import { ICON_FILES } from './icons.js';
 
 const WORDS = {
     ru: {
-        title: 'Инфоблок персонажей', settings: 'Настройки', refresh: 'Обновить данные', close: 'Закрыть', back: 'Назад',
+        title: 'Профиль', appearance: 'Внешность', settings: 'Настройки', refresh: 'Обновить данные', close: 'Закрыть', back: 'Назад',
         user: 'Юзер', scene: 'В сцене', all: 'Все персонажи', outfit: 'Одежда', inventory: 'Инвентарь', cycle: 'Статус цикла',
         state: 'Текущее состояние', location: 'Локация', date: 'Дата', time: 'Время', weather: 'Погода',
         currentScene: 'Текущая сцена', empty: 'Нет данных', noChat: 'Открой чат, чтобы посмотреть данные персонажей.',
@@ -24,10 +25,13 @@ const WORDS = {
         conflict: 'Это имя уже связано с другим персонажем:', saved: 'Сохранено', sharedUpdated: 'Данные Character Thoughts изменились. Закрой настройки, чтобы обновить панель.',
         exportPartial: 'Не все изображения доступны. Экспорт отменён: проверь аватарки или отключи общий набор.',
         inherited: 'Из Character Thoughts:', notes: 'Настройки сохраняются в браузере для этого чата. Данные не отправляются модели.',
-        noName: 'Имя не может быть пустым',
+        noName: 'Имя не может быть пустым', age: 'Возраст', setAge: 'Указать', editAge: 'Изменить возраст',
+        ageHint: 'Например, 19 лет. Пустое поле — возраст из инфоблока.', cancel: 'Отмена',
+        personalNotes: 'Заметки', notesHint: 'Кто этот персонаж, важные связи, даты — всё, что нужно держать под рукой.',
+        unsaved: 'Есть изменения', squareOnly: 'Для NPC нужна квадратная аватарка. Прежняя аватарка сохранена.',
     },
     en: {
-        title: 'Character Stats', settings: 'Settings', refresh: 'Refresh stats', close: 'Close', back: 'Back',
+        title: 'Profile', appearance: 'Appearance', settings: 'Settings', refresh: 'Refresh stats', close: 'Close', back: 'Back',
         user: 'User', scene: 'In scene', all: 'All characters', outfit: 'Outfit', inventory: 'Inventory', cycle: 'Cycle Status',
         state: 'Current state', location: 'Location', date: 'Date', time: 'Time', weather: 'Weather',
         currentScene: 'Current scene', empty: 'No data', noChat: 'Open a chat to view character stats.',
@@ -46,9 +50,12 @@ const WORDS = {
         conflict: 'This name already belongs to another character:', saved: 'Saved', sharedUpdated: 'Character Thoughts data changed. Close settings to refresh the panel.',
         exportPartial: 'Some images are unavailable. Export cancelled: check avatars or disable the shared set.',
         inherited: 'From Character Thoughts:', notes: 'Settings are stored in this browser for this chat. Nothing is sent to the model.', noName: 'A name is required',
+        age: 'Age', setAge: 'Set age', editAge: 'Edit age', ageHint: 'For example, 19 years. Leave blank to use the info block.', cancel: 'Cancel',
+        personalNotes: 'Notes', notesHint: 'Who this character is, important connections, dates — anything to keep at hand.',
+        unsaved: 'Unsaved changes', squareOnly: 'NPC portraits must be square. The previous portrait has been kept.',
     },
 };
-const ICONS = { outfit: 'shirt', inventory: 'bag-shopping', cycle: 'arrows-rotate', state: 'feather-pointed', location: 'location-dot', date: 'calendar-days', time: 'clock', weather: 'cloud-sun' };
+const ICONS = { appearance: 'clipboard-list', outfit: 'shirt', inventory: 'bag-shopping', cycle: 'sparkle', state: 'location-dot', location: 'location-dot', date: 'calendar-days', time: 'clock', weather: 'cloud-sun' };
 let settings = defaults(), state, activeKey = null, profile = {}, settingsOpen = false, editingPerson = '@user';
 let panel, body, title, launcher, notice, settingsButton, pickerHost, lastShared = '', pendingRefresh;
 const context = () => window.SillyTavern?.getContext?.() || null;
@@ -59,7 +66,12 @@ const element = (tag, className = '', text) => {
     if (text !== undefined) node.textContent = text;
     return node;
 };
-function icon(name) { const node = element('i', `fa-solid fa-${name}`); node.setAttribute('aria-hidden', 'true'); return node; }
+function icon(name) {
+    const file = ICON_FILES[name] || ICON_FILES['book-open'];
+    const node = element('span', 'cs-icon'); node.dataset.icon = name;
+    node.style.maskImage = `url("${new URL(file, import.meta.url).href}")`;
+    node.setAttribute('aria-hidden', 'true'); return node;
+}
 function button(label, iconName, action, className = '') {
     const node = element('button', `cs-button ${className}`);
     node.type = 'button'; node.title = label; node.setAttribute('aria-label', label);
@@ -131,14 +143,12 @@ function avatar(name, large = false) {
             initial.hidden = true;
             if (large) {
                 wrap.classList.add('cs-has-image');
-                wrap.closest('.cs-portrait')?.style.setProperty('--cs-portrait-ratio', String(image.naturalWidth / image.naturalHeight));
             }
         });
         image.addEventListener('error', () => {
             if (++index < sources.length) image.src = sources[index];
             else {
                 image.remove(); initial.hidden = false; wrap.classList.remove('cs-has-image');
-                if (large) wrap.closest('.cs-portrait')?.style.removeProperty('--cs-portrait-ratio');
             }
         });
         image.src = sources[0]; wrap.append(image);
@@ -199,7 +209,8 @@ function renderCharacter() {
     const isUser = selected === '@user';
     const character = isUser ? state.user : state.characters[nameKey(selected)];
     const fields = character?.fields || {};
-    const grid = element('div', 'cs-layout');
+    const layout = element('div', `cs-layout ${isUser ? 'cs-user' : 'cs-npc'}`);
+    const upper = element('div', 'cs-upper');
     const portrait = element('div', 'cs-portrait');
     portrait.append(avatar(selected, true));
     for (const corner of ['tl', 'tr', 'bl', 'br']) {
@@ -210,40 +221,71 @@ function renderCharacter() {
     const details = element('div', 'cs-details');
     const identity = element('div', 'cs-identity');
     const heading = element('div', 'cs-person-heading');
-    heading.append(element('h2', '', personLabel(selected)));
-    identity.append(heading);
-    const status = element('div', 'cs-status-line');
-    if (!isUser) status.append(element('span', 'cs-presence', t(character?.presence || 'unknown')));
-    if (!isUser && fields.mood?.value) {
-        const mood = element('span', 'cs-mood', fields.mood.value); sourceTitle(mood, fields.mood); status.append(mood);
+    const divider = element('div', 'cs-name-divider'); divider.setAttribute('aria-hidden', 'true'); divider.append(element('i'));
+    heading.append(element('h2', '', personLabel(selected)), divider); identity.append(heading);
+    if (settings.visible.age) identity.append(ageControl(selected, fields.info));
+    if (!isUser) {
+        const status = element('div', 'cs-status-line');
+        status.append(element('span', 'cs-presence', t(character?.presence || 'unknown')));
+        if (fields.mood?.value) {
+            const mood = element('span', 'cs-mood', fields.mood.value); sourceTitle(mood, fields.mood); status.append(mood);
+        }
+        identity.append(status);
     }
-    if (status.childElementCount) identity.append(status);
     details.append(identity);
-    const continuation = element('div', 'cs-continuation');
-    for (const field of ['outfit', 'inventory', 'cycle', 'state']) {
-        if (!settings.visible[field] || (!isUser && ['inventory', 'cycle'].includes(field)) || (isUser && field === 'state')) continue;
-        if (!isUser && !fields[field]) continue;
-        (field === 'cycle' ? continuation : details).append(card(field, fields[field]));
-    }
-    if (Object.values(state.scene).length && (isUser || ['date', 'time', 'weather'].some(field => settings.visible[field]))) {
-        const scene = element('section', 'cs-scene');
-        if (isUser && settings.visible.location) scene.append(card('location', state.scene.location));
-        const row = element('div', 'cs-scene-row');
-        for (const field of ['date', 'time', 'weather']) if (settings.visible[field]) row.append(card(field, state.scene[field], true));
-        if (row.childElementCount) scene.append(row);
-        if (scene.childElementCount) continuation.append(scene);
-    }
+    if (settings.visible.appearance && fields.info) details.append(card('appearance', fields.info));
+    if (isUser) for (const field of ['outfit', 'inventory']) if (settings.visible[field]) details.append(card(field, fields[field]));
+    upper.append(portrait, details); layout.append(upper);
+    if (!isUser) for (const field of ['outfit', 'state']) if (settings.visible[field] && fields[field]) layout.append(card(field, fields[field]));
+    if (settings.visible.notes) layout.append(notesCard(selected));
+    if (isUser && settings.visible.cycle) layout.append(card('cycle', fields.cycle));
+    if (isUser && settings.visible.location && state.scene.location) layout.append(card('location', state.scene.location));
+    const row = element('div', 'cs-scene-row');
+    for (const field of ['date', 'time', 'weather']) if (settings.visible[field] && state.scene[field]) row.append(card(field, state.scene[field], true));
+    if (row.childElementCount) layout.append(row);
     if (!Object.keys(fields).length && !Object.keys(state.scene).length) details.append(element('p', 'cs-empty', t('noStats')));
-    grid.append(portrait, details);
-    if (continuation.childElementCount) grid.append(continuation);
-    body.append(grid);
+    body.append(layout);
 }
+function ageControl(owner, info) {
+    const row = element('div', 'cs-age-row');
+    const label = element('span', '', t('age'));
+    const value = settings.people[owner]?.age || ageFromInfo(info?.value);
+    const edit = button(t('editAge'), null, () => { edit.hidden = true; form.hidden = false; input.focus(); }, 'cs-age-edit');
+    edit.textContent = value || t('setAge'); sourceTitle(edit, settings.people[owner]?.age ? null : info);
+    const form = element('form', 'cs-age-form'); form.hidden = true;
+    const input = element('input', 'cs-age-input'); input.type = 'text'; input.maxLength = 30;
+    input.value = settings.people[owner]?.age || ''; input.placeholder = value || t('age'); input.setAttribute('aria-label', t('age')); input.title = t('ageHint');
+    const save = element('button', 'cs-button', t('save')); save.type = 'submit';
+    const cancel = button(t('cancel'), null, () => { form.hidden = true; edit.hidden = false; });
+    form.append(input, save, cancel); row.append(label, edit, form);
+    form.addEventListener('submit', event => {
+        event.preventDefault(); settings.people[owner] = { ...settings.people[owner], age: clean(input.value).slice(0, 30) };
+        if (persist()) render();
+    });
+    return row;
+}
+function notesCard(owner) {
+    const node = element('section', 'cs-card cs-notes');
+    const heading = element('h3'); heading.append(element('span', '', t('personalNotes')));
+    const status = element('span', 'cs-notes-status'); status.setAttribute('aria-live', 'polite');
+    const input = element('textarea', 'cs-notes-input'); input.rows = 3; input.maxLength = 2000;
+    input.placeholder = t('notesHint'); input.setAttribute('aria-label', t('personalNotes')); input.value = settings.people[owner]?.notes || '';
+    const save = button(t('save'), null, () => {
+        settings.people[owner] = { ...settings.people[owner], notes: input.value.slice(0, 2000) };
+        if (persist()) status.textContent = t('saved');
+    }, 'cs-notes-save');
+    input.addEventListener('input', () => {
+        settings.people[owner] = { ...settings.people[owner], notes: input.value.slice(0, 2000) };
+        status.textContent = t('unsaved');
+    });
+    heading.append(status, save); node.append(heading, input); return node;
+}
+
 function sourceTitle(node, field) { if (field) node.title = `${t('source')} #${field.source}`; }
 function card(field, data, compact = false) {
     const node = element('section', `cs-card cs-${field} ${compact ? 'cs-compact' : ''}`);
     const label = element('h3'); label.append(icon(ICONS[field]));
-    if (compact) label.append(element('span', 'cs-sr-only', t(field)));
-    else label.append(document.createTextNode(t(field)));
+    label.append(document.createTextNode(t(field)));
     node.append(label); sourceTitle(node, data);
     if (field === 'cycle' && data?.value) {
         const cycle = cycleDetails(data.value);
@@ -287,7 +329,7 @@ function renderSettings() {
     wrap.append(element('p', 'cs-help', t('notes')));
     wrap.append(settingField(t('language'), select([['ru', 'Русский'], ['en', 'English']], settings.language, value => { settings.language = value; persist(); render(); })));
     const visible = element('fieldset'); visible.append(element('legend', '', t('fields')));
-    for (const field of FIELDS) visible.append(checkbox(t(field), settings.visible[field], value => { settings.visible[field] = value; persist(); }));
+    for (const field of FIELDS) visible.append(checkbox(t(field === 'notes' ? 'personalNotes' : field), settings.visible[field], value => { settings.visible[field] = value; persist(); }));
     wrap.append(visible);
     wrap.append(checkbox(t('sharing'), settings.shareAvatars, value => { settings.shareAvatars = value; persist(); refresh(); }));
     const profiles = readJSON(localStorage, 'ct_profiles_v1');
@@ -310,11 +352,13 @@ function renderSettings() {
         const inherited = profile.aliases?.[resolveOwner(owner, {}, profile)] || [];
         if (inherited.length) people.append(element('p', 'cs-help', `${t('inherited')} ${inherited.join(', ')}`));
     }
+    const age = element('input'); age.type = 'text'; age.maxLength = 30; age.value = person.age || ''; age.placeholder = t('ageHint');
+    people.append(settingField(t('age'), age));
     const save = button(t('save'), null, () => {
         const items = aliases ? [...new Set(aliases.value.split(',').map(clean).filter(value => value && nameKey(value) !== nameKey(owner)))] : [];
         const collision = owner === '@user' ? null : validateAliases(owner, items, settings, profile, allNames());
         if (collision) { notify(`${t('conflict')} ${collision}`); return; }
-        settings.people[owner] = { ...person, displayName: clean(display.value), aliases: items };
+        settings.people[owner] = { ...settings.people[owner], displayName: clean(display.value), aliases: items, age: clean(age.value).slice(0, 30) };
         if (persist()) { notify(t('saved')); refresh(); }
     }, 'cs-primary');
     const actions = element('div', 'cs-setting-actions'); actions.append(save, button(t('portrait'), null, () => uploadPortrait(owner)));
@@ -347,6 +391,7 @@ async function uploadPortrait(owner) {
         const image = new Image(); const url = URL.createObjectURL(file);
         try {
             await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = url; });
+            if (owner !== '@user' && image.naturalWidth !== image.naturalHeight) { notify(t('squareOnly')); return; }
             const scale = Math.min(1, 1200 / Math.max(image.naturalWidth, image.naturalHeight));
             const canvas = element('canvas'); canvas.width = Math.max(1, Math.round(image.naturalWidth * scale)); canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
             canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
@@ -423,7 +468,7 @@ function createUI() {
     panel.setAttribute('aria-label', 'Character Stats');
     const header = element('header', 'cs-header');
     title = element('strong', 'cs-title', t('title'));
-    const titleWrap = element('div', 'cs-title-wrap'); titleWrap.append(icon('id-card'), title);
+    const titleWrap = element('div', 'cs-title-wrap'); titleWrap.append(icon('book-open'), title);
     const controls = element('div', 'cs-controls');
     const refreshButton = button(t('refresh'), 'rotate-right', () => { notify(''); refresh(); });
     settingsButton = button(t('settings'), 'sliders', () => { settingsOpen = !settingsOpen; notify(''); refresh(); });

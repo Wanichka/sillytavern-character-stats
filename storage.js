@@ -28,6 +28,8 @@ export function sanitizeSettings(raw = {}) {
             displayName: typeof item.displayName === 'string' ? item.displayName : '',
             aliases: Array.isArray(item.aliases) ? item.aliases.filter(alias => typeof alias === 'string').map(clean).filter(Boolean) : [],
             image: safeImage(item.image) ? item.image : '',
+            age: typeof item.age === 'string' ? item.age.trim().slice(0, 30) : '',
+            notes: typeof item.notes === 'string' ? item.notes.slice(0, 2000) : '',
         };
     }
     return result;
