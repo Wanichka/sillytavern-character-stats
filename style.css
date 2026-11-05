@@ -95,6 +95,8 @@
 #cs-panel .cs-mood { color: var(--cs-sage); font-size: 14px; font-style: italic; margin: 0; overflow-wrap: anywhere; }
 #cs-panel .cs-card { min-width: 0; padding: 9px 12px; background: var(--cs-layer); border: 1px solid var(--cs-border); border-radius: 10px; margin: 0; }
 #cs-panel .cs-card h3 { display: flex; align-items: center; gap: 7px; margin: 0 0 6px; padding: 0 0 6px; border-bottom: 1px solid var(--cs-border); color: var(--cs-accent); font-size: 17px; font-weight: 600; line-height: 1.2; }
+#cs-panel .cs-card h3 { border-inline-start: 0 !important; border-left: 0 !important; box-shadow: none !important; background: none; }
+#cs-panel .cs-card h3::before, #cs-panel .cs-card h3::after { content: none !important; display: none !important; }
 #cs-panel .cs-value { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; font-size: 14px; font-weight: 400; }
 #cs-panel .cs-muted, #cs-panel .cs-empty { color: var(--cs-muted); }
 #cs-panel .cs-empty { padding: 10px; }
@@ -123,6 +125,14 @@
 #cs-panel input[type=checkbox] { accent-color: var(--cs-accent); margin: 0; }
 #cs-panel .cs-setting-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 #cs-launcher { position: fixed; right: 18px; bottom: 185px; z-index: 9999; width: 42px; height: 42px; font-size: 19px; box-shadow: 0 4px 18px #0005; }
+@container (max-width: 700px) {
+    #cs-panel .cs-user .cs-upper { align-items: start; row-gap: 10px; }
+    #cs-panel .cs-user .cs-details { display: contents; }
+    #cs-panel .cs-user .cs-portrait { grid-column: 1; grid-row: 1 / span 2; }
+    #cs-panel .cs-user .cs-identity { grid-column: 2; grid-row: 1; }
+    #cs-panel .cs-user .cs-appearance { grid-column: 2; grid-row: 2; }
+    #cs-panel .cs-user .cs-outfit, #cs-panel .cs-user .cs-inventory, #cs-panel .cs-user .cs-details > .cs-empty { grid-column: 1 / -1; }
+}
 @container (max-width: 600px) {
     #cs-panel .cs-upper { grid-template-columns: 184px minmax(0, 1fr); gap: 12px; }
     #cs-panel .cs-portrait { width: 184px; }
@@ -137,6 +147,9 @@
     #cs-panel .cs-upper { grid-template-columns: 1fr; gap: 12px; }
     #cs-panel .cs-portrait { justify-self: center; }
     #cs-panel .cs-details { display: contents; }
+    #cs-panel .cs-user .cs-portrait { grid-column: 1; grid-row: 2; }
+    #cs-panel .cs-user .cs-identity { grid-column: 1; grid-row: 1; }
+    #cs-panel .cs-user .cs-appearance { grid-column: 1; grid-row: 3; }
     #cs-panel .cs-identity { grid-row: 1; }
     #cs-panel .cs-portrait-image .cs-initial { font-size: 52px; }
     #cs-panel .cs-portrait-hint { display: none; }

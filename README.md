@@ -9,7 +9,7 @@ A theme-aware SillyTavern extension for viewing the user's and NPCs' current sta
 - A fixed **2:3 user portrait**. Images fill the frame with proportional cropping from the top; square images no longer change the frame's shape.
 - **Square NPC portraits**. New non-square NPC uploads are rejected without replacing the previous portrait. Existing inherited portraits continue to use the square frame.
 - Name, a fine divider with a small diamond, and an editable birth date directly below it.
-- User appearance from `basic_info`, followed by free-text outfit and inventory beside the portrait.
+- User appearance from `basic_info`, followed by free-text outfit and inventory. In narrow panels (up to 700 px of content width), outfit and inventory use the full width below the portrait and appearance; wider panels keep them beside the portrait.
 - NPC appearance from `char_info`, followed by full-width outfit and current state sections.
 - An always-visible **Notes** block: below NPC current state, or below the user's personal details. Notes are edited directly in the block and saved separately for each character in each chat.
 - User cycle and location sections across the full panel width, then three matching cards for date, time, and weather.

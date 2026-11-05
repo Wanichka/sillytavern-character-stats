@@ -199,6 +199,35 @@ try {
     assert.ok(await evaluate(`Math.abs(document.querySelector('.cs-portrait-image').clientWidth/document.querySelector('.cs-portrait-image').clientHeight-2/3)<.01`));
     assert.ok(await evaluate(`getComputedStyle(document.querySelector('.cs-portrait-image img')).objectFit==='cover'`));
     await screenshot('user-portrait.png');
+    // Reproduce the long real-world user fields at the Roleplay Tools panel width.
+    const longUser = `<user_stats><basic_info>Алиса's appearance: 19 лет (день рождения 20 июня); 172 см; 48 кг; стройная; B-cup; человек; длинные прямые рыжие волосы до бёдер, чёлка; большие округлые зелёные глаза; три маленьких родинки треугольником на тыльной стороне левой руки; летние веснушки на коленях; запах лилий.</basic_info><outfit>Причёска: Распущенные, уложенные для съёмки;\nВерх: Длинный объёмный вязаный свитер с узором из ёлок и снежинок;\nНиз: Тёмные облегающие брюки;\nНижнее бельё: Комплект белья;\nОбувь: Сапожки орехового цвета с мехом;\nАксессуары: Матовые серьги из чернёного серебра;</outfit><inventory>Алиса's inventory: сумочка, телефон, ключи от квартиры и повседневная одежда (в комнате подготовки).</inventory><cycle>Day: 8/28, фолликулярная фаза; Pregnancy: No; Risk: None</cycle></user_stats><char_stats><char_info>Ло: 19 лет; 191 см; 78 кг; стройный; человек; короткие чёрные волосы; серые глаза; многочисленные татуировки на руках, плечах, груди и спине; небольшая бородка; золотые серьги-кольца.</char_info><char_outfit>Outfit = Ло: Тёмная рубашка поверх чёрной футболки, джинсы, кроссовки и рюкзак</char_outfit><char_notes>State = Ло: смотрит всю съёмку Алисы и ждёт её у двери комнаты подготовки с рюкзаком и сидром</char_notes><char_mood>Mood = Ло: спокойный, гордый за Алису, нетерпеливый</char_mood></char_stats><general_stats><location>Нью-Йорк, Манхэттен, Парк-авеню (Дом Скандинавии, галерея у входа в комнату подготовки)</location><date>Четверг, 05.11.26</date><time>16:50</time><weather>Ясный ранний ноябрьский вечер 🌆</weather></general_stats>`;
+    await evaluate(`ctx.chat=[{mes:${JSON.stringify(longUser)}}];emit('MESSAGE_EDITED')`);
+    await waitFor(`document.querySelector('.cs-outfit .cs-value')?.textContent.includes('Сапожки')`);
+    try {
+        const demo = await readFile(path.join(out,'fullbody-avatar.dataurl'),'utf8');
+        await evaluate(`var localKey=Object.keys(localStorage).find(k=>k.startsWith('wani_character_stats_v1::'));var saved=JSON.parse(localStorage.getItem(localKey));saved.people['@user'].image=${JSON.stringify(demo.trim())};localStorage.setItem(localKey,JSON.stringify(saved));window.dispatchEvent(new StorageEvent('storage',{key:localKey}))`);
+        await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalWidth>200`);
+    } catch (error) { if(error.code!=='ENOENT')throw error; }
+    await evaluate(`var inherited=document.createElement('style');inherited.id='heading-theme-fixture';inherited.textContent='#cs-panel h3{border-left:3px solid gold!important;box-shadow:inset 3px 0 gold!important}#cs-panel h3::before{content:"";display:block;width:3px;background:gold}';document.head.append(inherited)`);
+    const rect = selector => evaluate(`document.querySelector('${selector}').getBoundingClientRect().toJSON()`);
+    for(const width of [570,730,1000]) {
+        await evaluate(`document.querySelector('#cs-panel').style.width='${width}px'`);
+        const outer=await rect('.cs-upper'),outfit=await rect('.cs-outfit'),inventory=await rect('.cs-inventory');
+        if(width<=730){assert.ok(outfit.width>=outer.width-1);assert.ok(inventory.width>=outer.width-1);assert.ok(outfit.top>=Math.max((await rect('.cs-portrait')).bottom,(await rect('.cs-appearance')).bottom)-1);}
+        else assert.ok(outfit.left>(await rect('.cs-portrait')).right);
+        assert.ok(await evaluate(`[...document.querySelectorAll('.cs-card h3')].every(n=>getComputedStyle(n).borderLeftWidth==='0px'&&getComputedStyle(n).boxShadow==='none'&&getComputedStyle(n,'::before').content==='none')`));
+    }
+    await evaluate(`Object.assign(document.querySelector('#cs-panel').style,{width:'570px',top:'16px'})`);
+    const userPanel=await rect('#cs-panel');
+    const userShot=await send('Page.captureScreenshot',{format:'png',clip:{x:userPanel.x,y:userPanel.y,width:userPanel.width,height:userPanel.height,scale:1}});
+    await writeFile(path.join(out,'user-narrow-fixed.png'),Buffer.from(userShot.data,'base64'));
+    await evaluate(`[...document.querySelectorAll('.cs-choice')].find(b=>b.textContent.includes('Капитан')).click()`);
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.cs-details')).display`),'grid');
+    assert.ok(await evaluate(`Math.abs(document.querySelector('.cs-portrait-image').clientHeight-document.querySelector('.cs-portrait-image').clientWidth)<2`));
+    assert.ok((await rect('.cs-outfit')).width>=(await rect('.cs-upper')).width-1);
+    const npcPanel=await rect('#cs-panel');const npcShot=await send('Page.captureScreenshot',{format:'png',clip:{x:npcPanel.x,y:npcPanel.y,width:npcPanel.width,height:npcPanel.height,scale:1}});await writeFile(path.join(out,'npc-narrow-unchanged.png'),Buffer.from(npcShot.data,'base64'));
+    await evaluate(`document.querySelector('.cs-choice').click();document.querySelector('#heading-theme-fixture').remove();document.querySelector('#cs-panel').style.width='1000px'`);
+
     // Changing a swipe removes old scene fields and updates the selected outfit.
     await evaluate(`ctx.chat[0].mes='<user_stats><outfit>Новое платье</outfit></user_stats>';emit('MESSAGE_SWIPED')`);
     await waitFor(`document.querySelector('.cs-outfit .cs-value')?.textContent==='Новое платье'`);
