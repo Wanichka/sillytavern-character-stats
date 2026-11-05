@@ -15,7 +15,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewp
 </style><link rel="stylesheet" href="/scripts/extensions/third-party/sillytavern-character-stats/style.css"></head><body>
 <script>
 window.handlers={};window.emit=(type)=>{for(const cb of handlers[type]||[])cb()};
-window.ctx={chatId:'chat-one',name1:'Алиса',characters:[{avatar:'law.png',name:'Law'}],characterId:0,chat:[{mes:\`<user_stats><basic_info>Алиса's appearance: adult</basic_info><outfit>Чёрная водолазка; тёмно-зелёный кардиган; клетчатая юбка; ботинки на шнуровке; подвеска-полумесяц.</outfit><inventory>Сумка, телефон, ключи от квартиры, свитер.</inventory><cycle>Day: 8/28, фолликулярная фаза; Pregnancy: No; Risk: None</cycle></user_stats><general_stats><location>Нью-Йорк · Манхэттен\nДом Скандинавии, внутренний сад</location><date>Четверг, 05.11.26</date><time>15:05</time><weather>Ясный осенний день ☀</weather><char_around>Characters around: Камилла (Ло в метро)</char_around></general_stats><char_stats><char_info>Ло: adult ; Камилла: adult</char_info><char_outfit>Outfit = Ло: Тёмная рубашка и джинсы ; Камилла: Джинсовая рубашка</char_outfit><char_notes>State = Ло: В метро по пути на съёмку ; Камилла: Во внутреннем саду</char_notes><char_mood>Mood = Ло: собранный ; Камилла: сосредоточенная</char_mood></char_stats>\`}]};
+window.ctx={chatId:'chat-one',name1:'Алиса',characters:[{avatar:'law.png',name:'Law'}],characterId:0,chat:[{mes:\`<user_stats><basic_info>Алиса's appearance: 19 лет; 172 см; рыжие волосы</basic_info><outfit>Чёрная водолазка; тёмно-зелёный кардиган; клетчатая юбка; ботинки на шнуровке; подвеска-полумесяц.</outfit><inventory>Сумка, телефон, ключи от квартиры, свитер.</inventory><cycle>Day: 8/28, фолликулярная фаза; Pregnancy: No; Risk: None</cycle></user_stats><general_stats><location>Нью-Йорк · Манхэттен\nДом Скандинавии, внутренний сад</location><date>Четверг, 05.11.26</date><time>15:05</time><weather>Ясный осенний день ☀</weather><char_around>Characters around: Камилла (Ло в метро)</char_around></general_stats><char_stats><char_info>Ло: adult ; Камилла: adult</char_info><char_outfit>Outfit = Ло: Тёмная рубашка и джинсы ; Камилла: Джинсовая рубашка</char_outfit><char_notes>State = Ло: В метро по пути на съёмку ; Камилла: Во внутреннем саду</char_notes><char_mood>Mood = Ло: собранный ; Камилла: сосредоточенная</char_mood></char_stats>\`}]};
 window.SillyTavern={getContext:()=>window.ctx};
 localStorage.clear();localStorage.setItem('ct_profiles_v1',JSON.stringify({p:{name:'Modern AU',aliases:{'Ло':['Law']},displayNames:{'Ло':'Ло Трафальгар'},avatars:{},uploads:{},characters:['Ло']}}));localStorage.setItem('ct_cardmap_v2',JSON.stringify({'card:law.png':'p'}));
 </script><script type="module" src="/scripts/extensions/third-party/sillytavern-character-stats/index.js"></script></body></html>`;
@@ -96,14 +96,16 @@ try {
     assert.equal(await evaluate(`document.querySelector('.cs-picker-menu').matches(':popover-open')`), true);
     await evaluate(`document.querySelector('.cs-picker-trigger').click()`);
     assert.equal(await evaluate(`document.querySelector('.cs-picker-trigger').getAttribute('aria-expanded')`), 'false');
+    assert.equal(await evaluate(`document.querySelector('.cs-birthday-edit').textContent`),'Указать');
+    assert.ok(await evaluate(`document.querySelector('.cs-appearance .cs-value').textContent.includes('19 лет')`));
     // Block values are rendered as text, never as executable HTML.
     await evaluate(`ctx.chat[0].mes+='<user_stats><inventory>&lt;img src=x onerror=alert(1)&gt;</inventory></user_stats>';emit('MESSAGE_EDITED')`);
     await waitFor(`document.querySelector('.cs-inventory .cs-value')?.textContent.includes('onerror')`);
     assert.equal(await evaluate(`document.querySelectorAll('.cs-inventory img').length`), 0);
     await evaluate(`ctx.chat[0].mes=ctx.chat[0].mes.replace(/<user_stats><inventory>&lt;img[\\s\\S]*$/,'');emit('MESSAGE_EDITED')`);
     await waitFor(`!document.querySelector('.cs-inventory .cs-value')?.textContent.includes('onerror')`);
-    await evaluate(`document.querySelector('.cs-age-edit').click();document.querySelector('.cs-age-input').value='24 года';document.querySelector('.cs-age-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));document.querySelector('.cs-notes-input').value='День рождения: 20 июня.\\nВзять камеру.';document.querySelector('.cs-notes-save').click()`);
-    assert.equal(await evaluate(`document.querySelector('.cs-age-edit').textContent`),'24 года');
+    await evaluate(`document.querySelector('.cs-birthday-edit').click();document.querySelector('.cs-birthday-input').value='20 июня';document.querySelector('.cs-birthday-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));document.querySelector('.cs-notes-input').value='День рождения: 20 июня.\\nВзять камеру.';document.querySelector('.cs-notes-save').click()`);
+    assert.equal(await evaluate(`document.querySelector('.cs-birthday-edit').textContent`),'20 июня');
     assert.ok(await evaluate(`document.querySelector('.cs-notes-input').value.includes('Взять камеру')`));
     const screenshot = async name => { const result = await send('Page.captureScreenshot', { format: 'png' }); await writeFile(path.join(out, name), Buffer.from(result.data, 'base64')); };
     await screenshot('desktop.png');
@@ -164,7 +166,7 @@ try {
     const savedBackup = JSON.parse(await readFile(exported, 'utf8'));
     assert.ok(savedBackup.settings.people['Ло'].image.startsWith('data:image/'));
     assert.equal(savedBackup.settings.people['@user'].displayName, 'Алиса ✦');
-    assert.equal(savedBackup.settings.people['@user'].age, '24 года');
+    assert.equal(savedBackup.settings.people['@user'].birthday, '20 июня');
     assert.ok(savedBackup.settings.people['@user'].notes.includes('Взять камеру'));
     assert.equal(savedBackup.settings.people['Ло'].notes,'Знаком с Алисой');
     await evaluate(`document.querySelector('.cs-settings input[type=text]').value='Изменено';document.querySelector('.cs-primary').click();window.confirm=()=>true;[...document.querySelectorAll('.cs-settings button')].find(b=>b.textContent==='Импорт').click()`);
@@ -207,12 +209,12 @@ try {
     await waitFor(`document.querySelector('.cs-person-heading h2')?.textContent==='Алиса'`);
     assert.equal(await evaluate(`document.querySelectorAll('.cs-choice').length`), 1);
     assert.equal(await evaluate(`document.querySelector('.cs-notes-input').value`),'');
-    assert.equal(await evaluate(`document.querySelector('.cs-age-edit').textContent`),'Указать');
+    assert.equal(await evaluate(`document.querySelector('.cs-birthday-edit').textContent`),'Указать');
     await evaluate(`ctx.chatId='chat-one';emit('CHAT_CHANGED')`);
-    await waitFor(`document.querySelector('.cs-age-edit')?.textContent==='24 года'`);
+    await waitFor(`document.querySelector('.cs-birthday-edit')?.textContent==='20 июня'`);
     assert.ok(await evaluate(`document.querySelector('.cs-notes-input').value.includes('Взять камеру')`));
     await evaluate(`ctx.chatId='chat-two';emit('CHAT_CHANGED')`);
-    await waitFor(`document.querySelector('.cs-age-edit')?.textContent==='Указать'`);
+    await waitFor(`document.querySelector('.cs-birthday-edit')?.textContent==='Указать'`);
     await evaluate(`ctx.chat[0]={mes:'<user_stats><outfit>Кардиган и клетчатая юбка</outfit><inventory>Сумка, телефон, ключи</inventory><cycle>Day: 8/28, текущая фаза; Pregnancy: No; Risk: None</cycle></user_stats><general_stats><location>Внутренний сад</location><date>Чт, 05.11.26</date><time>15:05</time><weather>Ясно ☀</weather></general_stats>'};emit('MESSAGE_RECEIVED')`);
     await waitFor(`document.querySelector('.cs-time .cs-value')?.textContent==='15:05'`);
     // Mobile remains reachable without page-level horizontal scrolling.

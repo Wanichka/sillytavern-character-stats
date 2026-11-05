@@ -1,5 +1,5 @@
 import { eventSource, event_types } from '../../../../script.js';
-import { FIELDS, clean, nameKey, resolveOwner, displayName, replay, cycleDetails, validateAliases, ageFromInfo } from './core.js';
+import { FIELDS, clean, nameKey, resolveOwner, displayName, replay, cycleDetails, validateAliases } from './core.js';
 import { defaults, chatKey, loadSettings, readJSON, sharedProfile, backup, importBackup, safeImage } from './storage.js';
 import { registerRoleplayPanel, isRoleplayDocked } from './roleplay-tools-adapter.js';
 import { ICON_FILES } from './icons.js';
@@ -25,8 +25,8 @@ const WORDS = {
         conflict: 'Это имя уже связано с другим персонажем:', saved: 'Сохранено', sharedUpdated: 'Данные Character Thoughts изменились. Закрой настройки, чтобы обновить панель.',
         exportPartial: 'Не все изображения доступны. Экспорт отменён: проверь аватарки или отключи общий набор.',
         inherited: 'Из Character Thoughts:', notes: 'Настройки сохраняются в браузере для этого чата. Данные не отправляются модели.',
-        noName: 'Имя не может быть пустым', age: 'Возраст', setAge: 'Указать', editAge: 'Изменить возраст',
-        ageHint: 'Например, 19 лет. Пустое поле — возраст из инфоблока.', cancel: 'Отмена',
+        noName: 'Имя не может быть пустым', birthday: 'Дата рождения', setBirthday: 'Указать', editBirthday: 'Изменить дату рождения',
+        birthdayHint: 'Например, 20 июня или 20.06.2000.', cancel: 'Отмена',
         personalNotes: 'Заметки', notesHint: 'Кто этот персонаж, важные связи, даты — всё, что нужно держать под рукой.',
         unsaved: 'Есть изменения', squareOnly: 'Для NPC нужна квадратная аватарка. Прежняя аватарка сохранена.',
     },
@@ -50,7 +50,7 @@ const WORDS = {
         conflict: 'This name already belongs to another character:', saved: 'Saved', sharedUpdated: 'Character Thoughts data changed. Close settings to refresh the panel.',
         exportPartial: 'Some images are unavailable. Export cancelled: check avatars or disable the shared set.',
         inherited: 'From Character Thoughts:', notes: 'Settings are stored in this browser for this chat. Nothing is sent to the model.', noName: 'A name is required',
-        age: 'Age', setAge: 'Set age', editAge: 'Edit age', ageHint: 'For example, 19 years. Leave blank to use the info block.', cancel: 'Cancel',
+        birthday: 'Birth date', setBirthday: 'Set date', editBirthday: 'Edit birth date', birthdayHint: 'For example, June 20 or 20.06.2000.', cancel: 'Cancel',
         personalNotes: 'Notes', notesHint: 'Who this character is, important connections, dates — anything to keep at hand.',
         unsaved: 'Unsaved changes', squareOnly: 'NPC portraits must be square. The previous portrait has been kept.',
     },
@@ -223,7 +223,7 @@ function renderCharacter() {
     const heading = element('div', 'cs-person-heading');
     const divider = element('div', 'cs-name-divider'); divider.setAttribute('aria-hidden', 'true'); divider.append(element('i'));
     heading.append(element('h2', '', personLabel(selected)), divider); identity.append(heading);
-    if (settings.visible.age) identity.append(ageControl(selected, fields.info));
+    if (settings.visible.birthday) identity.append(birthdayControl(selected));
     if (!isUser) {
         const status = element('div', 'cs-status-line');
         status.append(element('span', 'cs-presence', t(character?.presence || 'unknown')));
@@ -246,20 +246,20 @@ function renderCharacter() {
     if (!Object.keys(fields).length && !Object.keys(state.scene).length) details.append(element('p', 'cs-empty', t('noStats')));
     body.append(layout);
 }
-function ageControl(owner, info) {
-    const row = element('div', 'cs-age-row');
-    const label = element('span', '', t('age'));
-    const value = settings.people[owner]?.age || ageFromInfo(info?.value);
-    const edit = button(t('editAge'), null, () => { edit.hidden = true; form.hidden = false; input.focus(); }, 'cs-age-edit');
-    edit.textContent = value || t('setAge'); sourceTitle(edit, settings.people[owner]?.age ? null : info);
-    const form = element('form', 'cs-age-form'); form.hidden = true;
-    const input = element('input', 'cs-age-input'); input.type = 'text'; input.maxLength = 30;
-    input.value = settings.people[owner]?.age || ''; input.placeholder = value || t('age'); input.setAttribute('aria-label', t('age')); input.title = t('ageHint');
+function birthdayControl(owner) {
+    const row = element('div', 'cs-birthday-row');
+    const label = element('span', '', t('birthday'));
+    const value = settings.people[owner]?.birthday || '';
+    const edit = button(t('editBirthday'), null, () => { edit.hidden = true; form.hidden = false; input.focus(); }, 'cs-birthday-edit');
+    edit.textContent = value || t('setBirthday');
+    const form = element('form', 'cs-birthday-form'); form.hidden = true;
+    const input = element('input', 'cs-birthday-input'); input.type = 'text'; input.maxLength = 60;
+    input.value = settings.people[owner]?.birthday || ''; input.placeholder = value || t('birthday'); input.setAttribute('aria-label', t('birthday')); input.title = t('birthdayHint');
     const save = element('button', 'cs-button', t('save')); save.type = 'submit';
     const cancel = button(t('cancel'), null, () => { form.hidden = true; edit.hidden = false; });
     form.append(input, save, cancel); row.append(label, edit, form);
     form.addEventListener('submit', event => {
-        event.preventDefault(); settings.people[owner] = { ...settings.people[owner], age: clean(input.value).slice(0, 30) };
+        event.preventDefault(); settings.people[owner] = { ...settings.people[owner], birthday: clean(input.value).slice(0, 60) };
         if (persist()) render();
     });
     return row;
@@ -352,13 +352,13 @@ function renderSettings() {
         const inherited = profile.aliases?.[resolveOwner(owner, {}, profile)] || [];
         if (inherited.length) people.append(element('p', 'cs-help', `${t('inherited')} ${inherited.join(', ')}`));
     }
-    const age = element('input'); age.type = 'text'; age.maxLength = 30; age.value = person.age || ''; age.placeholder = t('ageHint');
-    people.append(settingField(t('age'), age));
+    const birthday = element('input'); birthday.type = 'text'; birthday.maxLength = 60; birthday.value = person.birthday || ''; birthday.placeholder = t('birthdayHint');
+    people.append(settingField(t('birthday'), birthday));
     const save = button(t('save'), null, () => {
         const items = aliases ? [...new Set(aliases.value.split(',').map(clean).filter(value => value && nameKey(value) !== nameKey(owner)))] : [];
         const collision = owner === '@user' ? null : validateAliases(owner, items, settings, profile, allNames());
         if (collision) { notify(`${t('conflict')} ${collision}`); return; }
-        settings.people[owner] = { ...settings.people[owner], displayName: clean(display.value), aliases: items, age: clean(age.value).slice(0, 30) };
+        settings.people[owner] = { ...settings.people[owner], displayName: clean(display.value), aliases: items, birthday: clean(birthday.value).slice(0, 60) };
         if (persist()) { notify(t('saved')); refresh(); }
     }, 'cs-primary');
     const actions = element('div', 'cs-setting-actions'); actions.append(save, button(t('portrait'), null, () => uploadPortrait(owner)));

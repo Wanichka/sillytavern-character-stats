@@ -1,5 +1,5 @@
 // Pure parsing and history replay. No prompt injection, network or DOM access.
-export const FIELDS = ['age', 'appearance', 'outfit', 'inventory', 'cycle', 'state', 'notes', 'location', 'date', 'time', 'weather'];
+export const FIELDS = ['birthday', 'appearance', 'outfit', 'inventory', 'cycle', 'state', 'notes', 'location', 'date', 'time', 'weather'];
 export const clean = value => String(value ?? '').replace(/[\u3164\uFFA0\u00a0]/g, ' ').replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
 export const nameKey = value => clean(value).normalize('NFKC').replace(/\s+/g, ' ').toLocaleLowerCase();
 const own = (object, key) => Object.hasOwn(object || {}, key);
@@ -150,7 +150,7 @@ export function validateAliases(owner, aliases, settings, profile, roster = []) 
         if (nameKey(resolveOwner(other, settings, profile)) === nameKey(owner)) continue;
         const names = [other, ...(settings.people?.[other]?.aliases || []), ...(profile.aliases?.[other] || [])];
         const configured = settings.people?.[other];
-        const hasAssignment = configured?.image || configured?.displayName || configured?.aliases?.length || configured?.age || configured?.notes
+        const hasAssignment = configured?.image || configured?.displayName || configured?.aliases?.length || configured?.age || configured?.birthday || configured?.notes
             || profile.uploads?.[other] || profile.avatars?.[other] || profile.displayNames?.[other] || profile.aliases?.[other]?.length;
         // A bare observed duplicate may be merged; configured identities cannot.
         if (hasAssignment && names.some(name => claimed.has(nameKey(name)))) return other;

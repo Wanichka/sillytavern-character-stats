@@ -127,13 +127,16 @@ test('age requires an explicit age unit and does not mistake height or dates for
     for (const info of ['172 см; 48 кг', 'Birthday: 20.06.2000', 'tall; 19 tattoos', 'unknown']) assert.equal(ageFromInfo(info), '');
 });
 
-test('manual age and multiline notes survive backups and remain chat-local', () => {
+test('birth dates, legacy ages and multiline notes survive backups and remain chat-local', () => {
     const settings = defaults();
-    settings.people.A = { age: '22 года', notes: 'День рождения: 20 июня.\nЗнаком с B.' };
+    settings.people.A = { birthday: '20 июня', age: '22 года', notes: 'Знаком с B.\nДругая запись.' };
     const restored = importBackup(JSON.parse(JSON.stringify(backup(settings))));
     assert.equal(restored.people.A.age, '22 года'); assert.equal(restored.people.A.notes, settings.people.A.notes);
+    assert.equal(restored.people.A.birthday, '20 июня');
+    assert.equal(defaults().visible.birthday, true);
     assert.equal(validateAliases('B', ['A'], restored, {}, ['A', 'B']), 'A');
     assert.equal(loadSettings(memory({}), 'another-chat').people.A, undefined);
-    const invalid = importBackup({ format: 'wani-character-stats', version: 1, settings: { people: { A: { age: 24, notes: { text: 'ignored' } } } } });
+    const invalid = importBackup({ format: 'wani-character-stats', version: 1, settings: { people: { A: { age: 24, birthday: 2000, notes: { text: 'ignored' } } } } });
     assert.equal(invalid.people.A.age, ''); assert.equal(invalid.people.A.notes, '');
+    assert.equal(invalid.people.A.birthday, '');
 });

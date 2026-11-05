@@ -86,10 +86,10 @@
 #cs-panel .cs-name-divider { height: 21px; display: flex; align-items: center; gap: 7px; color: var(--cs-accent); }
 #cs-panel .cs-name-divider::before, #cs-panel .cs-name-divider::after { content: ''; flex: 1; height: 1px; background: var(--cs-border); }
 #cs-panel .cs-name-divider > i { display: block; width: 5px; height: 5px; flex-shrink: 0; background: currentColor; transform: rotate(45deg); }
-#cs-panel .cs-age-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--cs-muted); font-size: 14px; }
-#cs-panel .cs-button.cs-age-edit { border: 0; border-bottom: 1px dashed var(--cs-border); border-radius: 0; background: transparent; min-height: 0; padding: 1px 0; color: var(--cs-text); }
-#cs-panel .cs-age-form { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-#cs-panel input.cs-age-input[type=text] { width: 115px; padding: 5px 7px; font-size: 16px; }
+#cs-panel .cs-birthday-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--cs-muted); font-size: 14px; }
+#cs-panel .cs-button.cs-birthday-edit { border: 0; border-bottom: 1px dashed var(--cs-border); border-radius: 0; background: transparent; min-height: 0; padding: 1px 0; color: var(--cs-text); }
+#cs-panel .cs-birthday-form { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+#cs-panel input.cs-birthday-input[type=text] { width: 175px; padding: 5px 7px; font-size: 16px; }
 #cs-panel .cs-status-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding-top: 5px; font-size: 12px; }
 #cs-panel .cs-presence { color: var(--cs-muted); margin: 0; }
 #cs-panel .cs-mood { color: var(--cs-sage); font-size: 14px; font-style: italic; margin: 0; overflow-wrap: anywhere; }

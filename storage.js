@@ -29,6 +29,7 @@ export function sanitizeSettings(raw = {}) {
             aliases: Array.isArray(item.aliases) ? item.aliases.filter(alias => typeof alias === 'string').map(clean).filter(Boolean) : [],
             image: safeImage(item.image) ? item.image : '',
             age: typeof item.age === 'string' ? item.age.trim().slice(0, 30) : '',
+            birthday: typeof item.birthday === 'string' ? item.birthday.trim().slice(0, 60) : '',
             notes: typeof item.notes === 'string' ? item.notes.slice(0, 2000) : '',
         };
     }

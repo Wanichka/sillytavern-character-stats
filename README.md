@@ -8,7 +8,7 @@ A theme-aware SillyTavern extension for viewing the user's and NPCs' current sta
 - The approved profile layout: portrait and personal details at the top, followed by full-width scene sections.
 - A fixed **2:3 user portrait**. Images fill the frame with proportional cropping from the top; square images no longer change the frame's shape.
 - **Square NPC portraits**. New non-square NPC uploads are rejected without replacing the previous portrait. Existing inherited portraits continue to use the square frame.
-- Name, a fine divider with a small diamond, and an editable age directly below it.
+- Name, a fine divider with a small diamond, and an editable birth date directly below it.
 - User appearance from `basic_info`, followed by free-text outfit and inventory beside the portrait.
 - NPC appearance from `char_info`, followed by full-width outfit and current state sections.
 - An always-visible **Notes** block: below NPC current state, or below the user's personal details. Notes are edited directly in the block and saved separately for each character in each chat.
@@ -39,12 +39,12 @@ The extension reads existing assistant-message info blocks. It does not create s
 
 | View | Source | Display |
 | --- | --- | --- |
-| User | `user_stats/basic_info` | Appearance; name when prefixed with `Name's appearance:`; explicit age when present |
+| User | `user_stats/basic_info` | Appearance; name when prefixed with `Name's appearance:`; age remains part of the appearance text |
 | User | `user_stats/outfit` | Outfit description |
 | User | `user_stats/inventory` | Inventory description |
 | User | `user_stats/cycle` | Cycle or pregnancy status |
 | User | `general_stats/location` | Current scene location |
-| NPC | `char_stats/char_info` | Appearance, explicit age, character discovery, and name boundaries |
+| NPC | `char_stats/char_info` | Appearance, character discovery, and name boundaries |
 | NPC | `char_stats/char_outfit` | Outfit description |
 | NPC | `char_stats/char_notes` | Current state, including location when supplied |
 | NPC | `char_stats/char_mood` | Mood subtitle |
@@ -108,17 +108,17 @@ Open **Settings** to select a character, enter a display name, add comma-separat
 
 For folder-based avatars, install Character Thoughts as the sibling extension `sillytavern-character-thoughts`. Both `<folder>/<file>` and its legacy `avatars/<folder>/<file>` layout are supported. Renamed installation directories require restoring that folder name or using uploaded/local portraits. If no usable image exists, the portrait shows the character's initial.
 
-## Manual age and notes
+## Birth date and notes
 
-Click the age below the name to edit it. A manual value overrides the age for that character in this chat. Leave it blank to use an explicit age from `basic_info` or `char_info` (for example, `19 лет` or `19 years old`). Height, weight, dates, and narrative prose are not used to infer an age. The appearance text itself stays unchanged.
+Click the birth date below the name to edit it, or use the character's settings. Enter a date such as `June 20` or `20.06.2000`; a year is optional, and fictional calendars are supported as text. Each character has their own manually entered birth date in the current chat. It is not inferred from age or the story date. Age stays in the appearance description supplied by `basic_info` or `char_info`.
 
 Write personal information directly in **Notes** and press **Save**. Each character, including the user, has their own notes in the current chat (up to 2,000 characters). Line breaks are preserved and text is never treated as HTML. Manual notes are independent of the automatically parsed NPC current state, so a new reply does not overwrite them.
 
-Age and notes are included in backups. Neither is injected into the model prompt. You can hide either section in the visibility settings.
+Birth dates and notes are included in backups. Neither is injected into the model prompt. You can hide either section in the visibility settings.
 
 ## Storage and backups
 
-Character Stats stores per-chat UI data in this browser's `localStorage`, under `wani_character_stats_v1::<card-or-group>::<chat-id>`. This includes the saved roster, selected character, filters, visible sections, language, aliases, display names, portrait overrides, manual ages, personal notes, and optional shared-set selection. Matching chat names on different cards do not share data.
+Character Stats stores per-chat UI data in this browser's `localStorage`, under `wani_character_stats_v1::<card-or-group>::<chat-id>`. This includes the saved roster, selected character, filters, visible sections, language, aliases, display names, portrait overrides, birth dates, personal notes, and optional shared-set selection. Matching chat names on different cards do not share data.
 
 Current stats are reconstructed from chat messages, so no extra copy is injected into model context. The original info blocks in messages still occupy their normal context space. The extension does not change your context or regex settings.
 
