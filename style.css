@@ -8,6 +8,8 @@
     --cs-hover: color-mix(in srgb, var(--cs-bg), var(--cs-text) 10%);
     --cs-muted: color-mix(in srgb, var(--cs-text) 64%, transparent);
     --cs-sage: color-mix(in srgb, #8b9d63 66%, var(--cs-text));
+    --cs-arousal: color-mix(in srgb, #b67f93 72%, var(--cs-accent));
+    --cs-pain: color-mix(in srgb, #bc8065 72%, var(--cs-accent));
     color: var(--cs-text);
     font-family: 'Times New Roman', Times, serif;
     font-size: 14px;
@@ -97,6 +99,14 @@
 #cs-panel .cs-card h3 { display: flex; align-items: center; gap: 7px; margin: 0 0 6px; padding: 0 0 6px; border-bottom: 1px solid var(--cs-border); color: var(--cs-accent); font-size: 17px; font-weight: 600; line-height: 1.2; }
 #cs-panel .cs-card h3 { border-inline-start: 0 !important; border-left: 0 !important; box-shadow: none !important; background: none; }
 #cs-panel .cs-card h3::before, #cs-panel .cs-card h3::after { content: none !important; display: none !important; }
+#cs-panel .cs-outfit-summary { display: flex; align-items: center; gap: 10px; margin: 0; padding: 0; border: 0; background: transparent; color: var(--cs-accent); list-style: none; cursor: pointer; }
+#cs-panel .cs-outfit-summary::-webkit-details-marker { display: none; }
+#cs-panel .cs-outfit-summary::marker { content: ''; }
+#cs-panel .cs-outfit-summary h3 { flex: 1; margin: 0; padding: 0; border-bottom: 0; }
+#cs-panel .cs-outfit[open] > .cs-outfit-summary { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--cs-border); }
+#cs-panel .cs-outfit-summary .cs-fold-arrow { width: 13px; height: 13px; flex-basis: 13px; }
+#cs-panel .cs-outfit[open] .cs-fold-arrow { transform: rotate(180deg); }
+#cs-panel .cs-outfit-summary:focus-visible { outline: 2px solid var(--cs-accent); outline-offset: 4px; border-radius: 3px; }
 #cs-panel .cs-value { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; font-size: 14px; font-weight: 400; }
 #cs-panel .cs-muted, #cs-panel .cs-empty { color: var(--cs-muted); }
 #cs-panel .cs-empty { padding: 10px; }
@@ -106,6 +116,16 @@
 #cs-panel .cs-cycle-track { height: 6px; background: var(--cs-hover); border-radius: 6px; overflow: hidden; margin: 9px 0; }
 #cs-panel .cs-cycle-track > div { height: 100%; background: var(--cs-sage); border-radius: inherit; }
 #cs-panel .cs-cycle-bottom { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 13px; }
+#cs-panel .cs-meter { --cs-meter-color: var(--cs-sage); min-width: 0; }
+#cs-panel .cs-meter-arousal { --cs-meter-color: var(--cs-arousal); }
+#cs-panel .cs-meter-pain { --cs-meter-color: var(--cs-pain); }
+#cs-panel .cs-meter + .cs-meter { margin-top: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--cs-border) 60%, transparent); }
+#cs-panel .cs-meter-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+#cs-panel .cs-meter-label { color: var(--cs-accent); font-weight: 600; }
+#cs-panel .cs-meter-value { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+#cs-panel .cs-meter-track { height: 5px; margin-top: 5px; background: var(--cs-hover); border-radius: 6px; overflow: hidden; }
+#cs-panel .cs-meter-track > div { height: 100%; background: var(--cs-meter-color); border-radius: inherit; }
+#cs-panel .cs-meter-comment { margin: 4px 0 0; color: var(--cs-muted); font-size: 13px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 #cs-panel .cs-scene-row { display: grid; grid-template-columns: 1fr .85fr 1.25fr; gap: 10px; }
 #cs-panel .cs-compact .cs-value { font-size: 17px; line-height: 1.4; font-weight: 400; color: var(--cs-text); }
 #cs-panel .cs-notes h3 { justify-content: space-between; }

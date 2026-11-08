@@ -1,6 +1,6 @@
 import { eventSource, event_types } from '../../../../script.js';
 import { getStringHash } from '../../../utils.js';
-import { FIELDS, clean, nameKey, resolveOwner, displayName, replay, cycleDetails, validateAliases } from './core.js';
+import { FIELDS, METER_FIELDS, clean, nameKey, resolveOwner, displayName, replay, cycleDetails, meterDetails, validateAliases } from './core.js';
 import { defaults, chatKey, createSettingsStore, readJSON, sharedProfile, backup, importBackup, safeImage } from './storage.js';
 import { registerRoleplayPanel, isRoleplayDocked } from './roleplay-tools-adapter.js';
 import { ICON_FILES } from './icons.js';
@@ -11,6 +11,7 @@ const WORDS = {
         title: 'Профиль', appearance: 'Внешность', settings: 'Настройки', refresh: 'Обновить данные', close: 'Закрыть', back: 'Назад',
         user: 'Юзер', scene: 'В сцене', all: 'Все персонажи', outfit: 'Одежда', inventory: 'Инвентарь', cycle: 'Статус цикла',
         state: 'Текущее состояние', location: 'Локация', date: 'Дата', time: 'Время', weather: 'Погода',
+        arousal: 'Возбуждение', fatigue: 'Усталость', pain: 'Боль', indicators: 'Показатели состояния', expandOutfit: 'Развернуть одежду', collapseOutfit: 'Свернуть одежду',
         currentScene: 'Текущая сцена', empty: 'Нет данных', noChat: 'Открой чат, чтобы посмотреть данные персонажей.',
         noStats: 'В сообщениях пока нет инфоблоков. Панель заполнится после ответа с нужными тегами.',
         present: 'В сцене', absent: 'Вне сцены', unknown: 'Присутствие неизвестно', userBadge: 'Персонаж пользователя',
@@ -39,6 +40,7 @@ const WORDS = {
         title: 'Profile', appearance: 'Appearance', settings: 'Settings', refresh: 'Refresh stats', close: 'Close', back: 'Back',
         user: 'User', scene: 'In scene', all: 'All characters', outfit: 'Outfit', inventory: 'Inventory', cycle: 'Cycle Status',
         state: 'Current state', location: 'Location', date: 'Date', time: 'Time', weather: 'Weather',
+        arousal: 'Arousal', fatigue: 'Fatigue', pain: 'Pain', indicators: 'State indicators', expandOutfit: 'Expand outfit', collapseOutfit: 'Collapse outfit',
         currentScene: 'Current scene', empty: 'No data', noChat: 'Open a chat to view character stats.',
         noStats: 'No info blocks yet. The panel will fill after a reply containing the supported tags.',
         present: 'In scene', absent: 'Outside scene', unknown: 'Presence unknown', userBadge: 'User character',
@@ -279,9 +281,11 @@ function renderCharacter() {
     if (isUser) for (const field of ['outfit', 'inventory']) if (settings.visible[field]) details.append(card(field, fields[field]));
     upper.append(portrait, details); layout.append(upper);
     if (!isUser) for (const field of ['outfit', 'state']) if (settings.visible[field] && fields[field]) layout.append(card(field, fields[field]));
-    if (settings.visible.notes) layout.append(notesCard(selected));
     if (isUser && settings.visible.cycle) layout.append(card('cycle', fields.cycle));
+    const meters = meterCard(fields);
+    if (meters) layout.append(meters);
     if (isUser && settings.visible.location && state.scene.location) layout.append(card('location', state.scene.location));
+    if (settings.visible.notes) layout.append(notesCard(selected));
     const row = element('div', 'cs-scene-row');
     for (const field of ['date', 'time', 'weather']) if (settings.visible[field] && state.scene[field]) row.append(card(field, state.scene[field], true));
     if (row.childElementCount) layout.append(row);
@@ -324,11 +328,46 @@ function notesCard(owner) {
 }
 
 function sourceTitle(node, field) { if (field) node.title = `${t('source')} #${field.source}`; }
+function meterCard(fields) {
+    const node = element('section', 'cs-card cs-meters'); node.setAttribute('aria-label', t('indicators'));
+    for (const field of METER_FIELDS) {
+        const data = fields[field];
+        if (!settings.visible[field] || !data?.value) continue;
+        const row = element('div', `cs-meter cs-meter-${field}`); sourceTitle(row, data);
+        const heading = element('div', 'cs-meter-heading'); heading.append(element('strong', 'cs-meter-label', t(field)));
+        const details = meterDetails(data.value);
+        if (details) {
+            heading.append(element('span', 'cs-meter-value', `${details.level} / 100`));
+            const track = element('div', 'cs-meter-track');
+            track.setAttribute('role', 'progressbar'); track.setAttribute('aria-label', t(field));
+            track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', '100'); track.setAttribute('aria-valuenow', String(details.level));
+            const fill = element('div'); fill.style.width = `${details.level}%`; track.append(fill);
+            row.append(heading, track);
+            if (details.comment) row.append(element('p', 'cs-meter-comment', details.comment));
+        } else row.append(heading, element('p', 'cs-meter-comment', data.value));
+        node.append(row);
+    }
+    return node.childElementCount ? node : null;
+}
 function card(field, data, compact = false) {
-    const node = element('section', `cs-card cs-${field} ${compact ? 'cs-compact' : ''}`);
+    const node = element(field === 'outfit' ? 'details' : 'section', `cs-card cs-${field} ${compact ? 'cs-compact' : ''}`);
     const label = element('h3'); label.append(icon(ICONS[field]));
     label.append(document.createTextNode(t(field)));
-    node.append(label); sourceTitle(node, data);
+    if (field === 'outfit') {
+        const owner = settings.selected, capturedKey = activeKey;
+        node.open = !settings.people[owner]?.outfitCollapsed;
+        let previousOpen = node.open;
+        const summary = element('summary', 'cs-outfit-summary');
+        const arrow = icon('chevron-down'); arrow.classList.add('cs-fold-arrow'); summary.append(label, arrow);
+        summary.title = t(node.open ? 'collapseOutfit' : 'expandOutfit'); node.append(summary);
+        node.addEventListener('toggle', () => {
+            if (node.open === previousOpen) return;
+            previousOpen = node.open; summary.title = t(node.open ? 'collapseOutfit' : 'expandOutfit');
+            if (!node.isConnected || capturedKey !== activeKey || capturedKey !== chatKey(context())) return;
+            settings.people[owner] = { ...settings.people[owner], outfitCollapsed: !node.open }; persist();
+        });
+    } else node.append(label);
+    sourceTitle(node, data);
     if (field === 'cycle' && data?.value) {
         const cycle = cycleDetails(data.value);
         if (cycle) {

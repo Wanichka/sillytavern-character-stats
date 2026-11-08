@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clean, nameKey, parseMessage, namedSegments, replay, cycleDetails, resolveOwner, validateAliases, ageFromInfo } from '../core.js';
+import { clean, nameKey, parseMessage, namedSegments, replay, cycleDetails, meterDetails, resolveOwner, validateAliases, ageFromInfo } from '../core.js';
 import { chatKey, loadSettings, sharedProfile, backup, importBackup, defaults, createSettingsStore } from '../storage.js';
 
 const assistant = mes => ({ mes });
@@ -160,4 +160,57 @@ test('settings store rejects failed writes instead of reporting success', async 
     const store = createSettingsStore({ localStorage: { getItem: blocked, setItem: blocked } });
     await assert.rejects(store.save('chat', defaults()), AggregateError);
     await assert.rejects(store.load('chat'), AggregateError);
+});
+
+test('user and NPC meters stay scoped to their owners and accept the supplied Hangul-spaced format', () => {
+    const data = user('<arousal>5/100 (calm)</arousal><fatigue>18/100 (rested)</fatigue><pain>0/100 (no pain)</pain>')
+        + chars('<char_info>Ло Трафальгар: adult ; Камилла: adult</char_info><char_arousal>Arousalㅤ=ㅤЛоㅤТрафальгар:ㅤ42%/100%ㅤ(ощутимоеㅤвозбуждение;ㅤпричина:ㅤблизость) ; Камилла: 0%/100% (calm)</char_arousal><char_fatigue>Fatigue = Ло Трафальгар: 18%/100% (освежился под душем)</char_fatigue><char_pain>Pain = Ло Трафальгар: 0%/100% (боли нет)</char_pain>')
+        + '<arousal>99/100 (outside user_stats)</arousal><char_pain>Pain = Fake: 100/100</char_pain>';
+    const parsed = parseMessage(data);
+    assert.equal(parsed.user.arousal, '5/100 (calm)'); assert.equal(parsed.user.pain, '0/100 (no pain)');
+    assert.equal(parsed.characters.length, 2);
+    assert.equal(parsed.characters[0].fields.arousal, '42%/100% (ощутимое возбуждение; причина: близость)');
+    assert.equal(parsed.characters[0].fields.fatigue, '18%/100% (освежился под душем)');
+    assert.equal(parsed.characters[0].fields.pain, '0%/100% (боли нет)');
+    assert.equal(parsed.characters[1].fields.arousal, '0%/100% (calm)');
+    assert.equal(parsed.characters[1].fields.pain, undefined);
+    assert.equal(parseMessage(chars('<char_arousal>Arousal = New NPC: 22/100</char_arousal>')).characters[0].name, 'New NPC');
+});
+
+test('meters carry omitted data, clear explicitly empty fields, resolve aliases, and roll back edits and deletions', () => {
+    const settings = defaults(); settings.people['Ло Трафальгар'] = { aliases: ['Law'] };
+    const first = assistant(user('<arousal>0/100</arousal><fatigue>14/100 (fresh)</fatigue><pain>0/100</pain>')
+        + chars('<char_arousal>Arousal = Ло Трафальгар: 42%/100% (close)</char_arousal><char_fatigue>Fatigue = Ло Трафальгар: 18/100</char_fatigue>'));
+    const second = assistant(user('<fatigue></fatigue>') + chars('<char_arousal>Arousal = Law: 12/100 (calmed down)</char_arousal><char_pain>Pain = Law: 0%/100% (no pain)</char_pain>'));
+    let state = replay([first, second], settings);
+    assert.deepEqual(state.user.fields.fatigue, { value: '', source: 2 });
+    assert.deepEqual(state.user.fields.arousal, { value: '0/100', source: 1 });
+    assert.equal(Object.keys(state.characters).length, 1);
+    assert.deepEqual(state.characters['ло трафальгар'].fields.arousal, { value: '12/100 (calmed down)', source: 2 });
+    assert.equal(state.characters['ло трафальгар'].fields.fatigue.value, '18/100');
+    second.mes = chars('<char_pain>Pain = Law:</char_pain>');
+    state = replay([first, second], settings);
+    assert.equal(state.characters['ло трафальгар'].fields.arousal.value, '42%/100% (close)');
+    assert.equal(state.characters['ло трафальгар'].fields.pain.value, '');
+    assert.equal(state.user.fields.fatigue.value, '14/100 (fresh)');
+    assert.equal(replay([first], settings).characters['ло трафальгар'].fields.pain, undefined);
+    assert.equal(replay([{ is_user: true, mes: first.mes }, { is_system: true, mes: first.mes }, assistant(`<think>${first.mes}</think>`)]).user.fields.arousal, undefined);
+});
+
+test('meter parsing preserves real zeroes and comments without manufacturing values for unknown formats', () => {
+    assert.deepEqual(meterDetails('42%/100%ㅤ(ощутимоеㅤвозбуждение)'), { level: 42, comment: 'ощутимое возбуждение' });
+    assert.deepEqual(meterDetails('0 / 100 (боли нет)'), { level: 0, comment: 'боли нет' });
+    assert.deepEqual(meterDetails('100% / 100%'), { level: 100, comment: '' });
+    assert.deepEqual(meterDetails('12,5/100 (comment (with details))'), { level: 12.5, comment: 'comment (with details)' });
+    for (const value of ['', 'Unknown', 'None', '42%', '42/10', '-1/100', '101/100', '5/100 <img src=x onerror=alert(1)>']) assert.equal(meterDetails(value), null, value);
+});
+
+test('outfit collapse and per-meter visibility are chat-local, portable settings with safe defaults', () => {
+    const settings = defaults(); settings.people['@user'] = { outfitCollapsed: true }; settings.people.NPC = { outfitCollapsed: false };
+    settings.visible.pain = false;
+    const restored = importBackup(backup(settings));
+    assert.equal(restored.people['@user'].outfitCollapsed, true); assert.equal(restored.people.NPC.outfitCollapsed, false);
+    assert.equal(restored.visible.pain, false); assert.equal(restored.visible.arousal, true); assert.equal(restored.visible.fatigue, true);
+    assert.equal(importBackup({ format: 'wani-character-stats', version: 1, settings: { people: { A: { outfitCollapsed: 'true' } } } }).people.A.outfitCollapsed, false);
+    assert.equal(defaults().people['@user'], undefined); assert.equal(defaults().visible.pain, true);
 });

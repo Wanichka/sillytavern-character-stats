@@ -1,5 +1,6 @@
 // Pure parsing and history replay. No prompt injection, network or DOM access.
-export const FIELDS = ['birthday', 'appearance', 'outfit', 'inventory', 'cycle', 'state', 'notes', 'location', 'date', 'time', 'weather'];
+export const METER_FIELDS = ['arousal', 'fatigue', 'pain'];
+export const FIELDS = ['birthday', 'appearance', 'outfit', 'inventory', 'cycle', ...METER_FIELDS, 'state', 'location', 'notes', 'date', 'time', 'weather'];
 export const clean = value => String(value ?? '').replace(/[\u3164\uFFA0\u00a0]/g, ' ').replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
 export const nameKey = value => clean(value).normalize('NFKC').replace(/\s+/g, ' ').toLocaleLowerCase();
 const own = (object, key) => Object.hasOwn(object || {}, key);
@@ -49,7 +50,7 @@ export function parseMessage(raw, knownNames = []) {
     const chars = block(text, 'char_stats');
     const result = { user: {}, scene: {}, characters: [], presence: null, name: null };
     if (user !== null) {
-        for (const field of ['outfit', 'inventory', 'cycle']) {
+        for (const field of ['outfit', 'inventory', 'cycle', ...METER_FIELDS]) {
             const value = block(user, field);
             if (value !== null) result.user[field] = value;
         }
@@ -73,6 +74,7 @@ export function parseMessage(raw, knownNames = []) {
         for (const [tag, field, prefix] of [
             ['char_info', 'info', 'Info'], ['char_outfit', 'outfit', 'Outfit'],
             ['char_notes', 'state', 'State'], ['char_mood', 'mood', 'Mood'],
+            ['char_arousal', 'arousal', 'Arousal'], ['char_fatigue', 'fatigue', 'Fatigue'], ['char_pain', 'pain', 'Pain'],
         ]) {
             for (const entry of namedSegments(block(chars, tag), prefix, tag === 'char_info' ? [] : hints)) {
                 const key = nameKey(entry.name);
@@ -137,6 +139,14 @@ export function cycleDetails(value) {
     const week = match[1].toLowerCase() === 'week';
     if (!total || current > total || (week && days > 6)) return null;
     return { week, count: `${current}${week ? `+${days}` : ''} / ${total}`, phase: match[5], pregnancy: match[6], risk: match[7], progress: Math.min(100, Math.max(0, (current + (week ? days / 7 : 0)) / total * 100)) };
+}
+
+export function meterDetails(value) {
+    const match = clean(value).match(/^(\d+(?:[.,]\d+)?)\s*%?\s*\/\s*100\s*%?(?:\s*\(([\s\S]*)\))?$/);
+    if (!match) return null;
+    const level = Number(match[1].replace(',', '.'));
+    if (!Number.isFinite(level) || level > 100) return null;
+    return { level, comment: clean(match[2]) };
 }
 
 export function validateAliases(owner, aliases, settings, profile, roster = []) {

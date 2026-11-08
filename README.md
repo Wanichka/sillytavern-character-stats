@@ -11,11 +11,13 @@ A theme-aware SillyTavern extension for viewing the user's and NPCs' current sta
 - Name, a fine divider with a small diamond, and an editable birth date directly below it.
 - User appearance from `basic_info`, followed by free-text outfit and inventory. In narrow panels (up to 700 px of content width), outfit and inventory use the full width below the portrait and appearance; wider panels keep them beside the portrait.
 - NPC appearance from `char_info`, followed by full-width outfit and current state sections.
-- An always-visible **Notes** block: below NPC current state, or below the user's personal details. Notes are edited directly in the block and saved separately for each character in each chat.
-- User cycle and location sections across the full panel width, then three matching cards for date, time, and weather.
+- One compact card with **arousal, fatigue, and pain** meters for both the user and NPCs. Each available value has its own muted accent, score out of 100, and visible comment.
+- User sections follow this order: **appearance → outfit → inventory → cycle → meters → location → notes → date/time/weather**. NPC meters follow the current state section, before notes.
+- An always-visible **Notes** block. Notes are edited directly in the block and saved separately for each character in each chat.
+- **Collapsible outfits** for both the user and NPCs. Click the outfit header or use the keyboard; the expanded/collapsed choice is remembered separately for each person in each chat. Existing chats start expanded.
 - Scene date, time, and weather are shown as supplied, including long weather descriptions. No extra time-of-day label is invented.
 - Reuse Character Thoughts avatars, aliases, and display names, with optional per-chat overrides.
-- Choose visible sections in settings; no section collapse buttons clutter the main view.
+- Choose visible sections and individual meters in settings. Other sections remain expanded.
 - SillyTavern theme colors, one Times New Roman font family, and locally bundled SVG icons.
 - Standalone and Roleplay Tools docking modes, Russian and English interfaces, and per-chat JSON backups.
 - Disk-backed profiles and separate avatar files in SillyTavern, with verified migration from older browser storage.
@@ -44,11 +46,13 @@ The extension reads existing assistant-message info blocks. It does not create s
 | User | `user_stats/outfit` | Outfit description |
 | User | `user_stats/inventory` | Inventory description |
 | User | `user_stats/cycle` | Cycle or pregnancy status |
+| User | `user_stats/arousal`, `fatigue`, `pain` | Scores and comments in a shared meter card |
 | User | `general_stats/location` | Current scene location |
 | NPC | `char_stats/char_info` | Appearance, character discovery, and name boundaries |
 | NPC | `char_stats/char_outfit` | Outfit description |
 | NPC | `char_stats/char_notes` | Current state, including location when supplied |
 | NPC | `char_stats/char_mood` | Mood subtitle |
+| NPC | `char_stats/char_arousal`, `char_fatigue`, `char_pain` | Named scores and comments in a shared meter card |
 | Scene | `general_stats/date`, `time`, `weather` | Shared scene information |
 | Presence | `general_stats/char_around` | Present/absent status |
 
@@ -64,6 +68,9 @@ This example documents the expected data shape; it is not a new required prompt.
 <outfit>Current outfit, including any accessories.</outfit>
 <inventory>User Name's inventory: current possessions.</inventory>
 <cycle>Day: 8/28, current phase (effects); Pregnancy: No; Risk: None</cycle>
+<arousal>0/100 (current comment)</arousal>
+<fatigue>18/100 (current comment)</fatigue>
+<pain>0/100 (current comment)</pain>
 </user_stats>
 
 <char_stats>
@@ -71,6 +78,9 @@ This example documents the expected data shape; it is not a new required prompt.
 <char_outfit>Outfit = Character One: current outfit ; Character Two: current outfit</char_outfit>
 <char_notes>State = Character One: current state or location ; Character Two: current state or location</char_notes>
 <char_mood>Mood = Character One: current mood ; Character Two: current mood</char_mood>
+<char_arousal>Arousal = Character One: 42%/100% (current comment) ; Character Two: 0%/100% (current comment)</char_arousal>
+<char_fatigue>Fatigue = Character One: 18%/100% (current comment) ; Character Two: 12%/100% (current comment)</char_fatigue>
+<char_pain>Pain = Character One: 0%/100% (current comment) ; Character Two: 0%/100% (current comment)</char_pain>
 </char_stats>
 
 <general_stats>
@@ -83,6 +93,8 @@ This example documents the expected data shape; it is not a new required prompt.
 ```
 
 Cycles support `Day: X/Y, phase (effects); Pregnancy: X; Risk: X`. Pregnancies support `Week: X+Y/40, phase (effects); Pregnancy: Yes; Risk: None`. Unrecognized formats are shown as text rather than discarded or recalculated. The extension never advances the cycle or story clock itself.
+
+Meters accept `X/100 (comment)` and `X%/100% (comment)`, with optional comments and decimal scores between 0 and 100. Hangul filler spaces are supported. A real zero remains visible with an empty track. Missing or explicitly cleared values do not produce fabricated zeroes; when no visible meter has data, the whole meter card is omitted. Unrecognized values are preserved as text without a numeric track. Each meter can be hidden independently in settings. No new prompt or model call is required.
 
 ## History and presence
 
@@ -121,7 +133,7 @@ Birth dates and notes are included in backups. Neither is injected into the mode
 
 Since **1.2.0**, Character Stats saves profiles to files on the machine running SillyTavern, through its built-in authenticated file API. No server plugin is required. In a standard installation, the files are under `data/<user-handle>/user/files/` (`default-user` for the default account):
 
-- `wani-character-stats-chat-<id>.json`: the saved roster, selected character, filters, visible sections, language, aliases, display names, birth dates, personal notes, shared-set selection, and portrait file references. Each card/group and chat ID has its own file; matching chat names on different cards remain separate.
+- `wani-character-stats-chat-<id>.json`: the saved roster, selected character, filters, visible sections/meters, language, aliases, display names, birth dates, personal notes, outfit collapse choices, shared-set selection, and portrait file references. Each card/group and chat ID has its own file; matching chat names on different cards remain separate.
 - `wani-character-stats-avatar-<id>.<extension>`: uploaded raster portraits. Image data is no longer embedded in browser settings. Identical uploads reuse the same verified file. Replaced images are retained on disk; the extension does not delete files automatically.
 
 Updating the extension or clearing browser data does not remove these files. A different browser connected to the same SillyTavern account and instance can load them. For a remote installation, the files are on that server, not on the device running the browser. Raw chat exports do not include these separate profile files; use the extension's **Export** button or back up the SillyTavern user directory.

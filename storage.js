@@ -32,6 +32,7 @@ export function sanitizeSettings(raw = {}) {
             age: typeof item.age === 'string' ? item.age.trim().slice(0, 30) : '',
             birthday: typeof item.birthday === 'string' ? item.birthday.trim().slice(0, 60) : '',
             notes: typeof item.notes === 'string' ? item.notes.slice(0, 2000) : '',
+            outfitCollapsed: item.outfitCollapsed === true,
         };
     }
     return result;

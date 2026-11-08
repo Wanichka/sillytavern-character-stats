@@ -12,15 +12,17 @@ const out = path.join(root, '.test-artifacts');
 await mkdir(out, { recursive: true });
 const diskFiles = new Map();
 let rejectUploads = false;
+const userMeters = '<arousal>0/100 (отсутствует)</arousal><fatigue>14/100 (бодрая после учёбы и дороги)</fatigue><pain>0/100 (ничего не болит)</pain>';
+const npcMeters = '<char_arousal>Arousalㅤ=ㅤЛоㅤТрафальгар:ㅤ42%/100%ㅤ(ощутимоеㅤвозбуждениеㅤотㅤеёㅤсловㅤиㅤблизостиㅤвㅤводе,ㅤприглушённоеㅤсамоконтролем)</char_arousal><char_fatigue>Fatigueㅤ=ㅤЛоㅤТрафальгар:ㅤ18%/100%ㅤ(освежилсяㅤподㅤдушем)</char_fatigue><char_pain>Painㅤ=ㅤЛоㅤТрафальгар:ㅤ0%/100%ㅤ(болиㅤнет)</char_pain>';
 const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="data:,"><style>
 :root {--SmartThemeBlurTintColor:#211f17;--SmartThemeBodyColor:#e6dfce;--SmartThemeQuoteColor:#dfb57b;--mainFontFamily:Georgia,serif;--SmartThemeBlurStrength:10;}body{margin:0;background:radial-gradient(ellipse at top left,#3b4834,#141711);min-height:100vh;color:#e6dfce}button{cursor:pointer} [hidden]{display:none!important}
 </style><link rel="stylesheet" href="/scripts/extensions/third-party/sillytavern-character-stats/style.css"></head><body>
 <script>
 window.handlers={};window.emit=(type)=>{for(const cb of handlers[type]||[])cb()};
-window.ctx={chatId:'chat-one',name1:'Алиса',characters:[{avatar:'law.png',name:'Law'}],characterId:0,chat:[{mes:\`<user_stats><basic_info>Алиса's appearance: 19 лет; 172 см; рыжие волосы</basic_info><outfit>Чёрная водолазка; тёмно-зелёный кардиган; клетчатая юбка; ботинки на шнуровке; подвеска-полумесяц.</outfit><inventory>Сумка, телефон, ключи от квартиры, свитер.</inventory><cycle>Day: 8/28, фолликулярная фаза; Pregnancy: No; Risk: None</cycle></user_stats><general_stats><location>Нью-Йорк · Манхэттен\nДом Скандинавии, внутренний сад</location><date>Четверг, 05.11.26</date><time>15:05</time><weather>Ясный осенний день ☀</weather><char_around>Characters around: Камилла (Ло в метро)</char_around></general_stats><char_stats><char_info>Ло: adult ; Камилла: adult</char_info><char_outfit>Outfit = Ло: Тёмная рубашка и джинсы ; Камилла: Джинсовая рубашка</char_outfit><char_notes>State = Ло: В метро по пути на съёмку ; Камилла: Во внутреннем саду</char_notes><char_mood>Mood = Ло: собранный ; Камилла: сосредоточенная</char_mood></char_stats>\`}]};
+window.ctx={chatId:'chat-one',name1:'Алиса',characters:[{avatar:'law.png',name:'Law'}],characterId:0,chat:[{mes:\`<user_stats><basic_info>Алиса's appearance: 19 лет; 172 см; рыжие волосы</basic_info><outfit>Чёрная водолазка; тёмно-зелёный кардиган; клетчатая юбка; ботинки на шнуровке; подвеска-полумесяц.</outfit><inventory>Сумка, телефон, ключи от квартиры, свитер.</inventory><cycle>Day: 8/28, фолликулярная фаза; Pregnancy: No; Risk: None</cycle>${userMeters}</user_stats><general_stats><location>Нью-Йорк · Манхэттен\nДом Скандинавии, внутренний сад</location><date>Четверг, 05.11.26</date><time>15:05</time><weather>Ясный осенний день ☀</weather><char_around>Characters around: Камилла (Ло в метро)</char_around></general_stats><char_stats><char_info>Ло: adult ; Камилла: adult</char_info><char_outfit>Outfit = Ло: Тёмная рубашка и джинсы ; Камилла: Джинсовая рубашка</char_outfit><char_notes>State = Ло: В метро по пути на съёмку ; Камилла: Во внутреннем саду</char_notes><char_mood>Mood = Ло: собранный ; Камилла: сосредоточенная</char_mood>${npcMeters}</char_stats>\`}]};
 window.SillyTavern={getContext:()=>window.ctx};
 window.ctx.getRequestHeaders=()=>({'Content-Type':'application/json','X-CSRF-Token':'test-token'});
-if(!sessionStorage.getItem('cs-test-boot')){localStorage.clear();sessionStorage.setItem('cs-test-boot','1')}localStorage.setItem('ct_profiles_v1',JSON.stringify({p:{name:'Modern AU',aliases:{'Ло':['Law']},displayNames:{'Ло':'Ло Трафальгар'},avatars:{},uploads:{},characters:['Ло']}}));localStorage.setItem('ct_cardmap_v2',JSON.stringify({'card:law.png':'p'}));
+if(!sessionStorage.getItem('cs-test-boot')){localStorage.clear();sessionStorage.setItem('cs-test-boot','1')}localStorage.setItem('ct_profiles_v1',JSON.stringify({p:{name:'Modern AU',aliases:{'Ло':['Law','Ло Трафальгар']},displayNames:{'Ло':'Ло Трафальгар'},avatars:{},uploads:{},characters:['Ло']}}));localStorage.setItem('ct_cardmap_v2',JSON.stringify({'card:law.png':'p'}));
 </script><script type="module">
 const base='/scripts/extensions/third-party/sillytavern-character-stats/';
 window.testModules=Promise.all([import(base+'storage.js'),import(base+'file-storage.js'),import('/scripts/utils.js')]).then(([api,files,utils])=>({api,store:files.createFileSettingsStore({fetch:(...args)=>window.fetch(...args),getRequestHeaders:()=>ctx.getRequestHeaders(),hash:utils.getStringHash,legacy:api.createSettingsStore(window)})}));
@@ -103,6 +105,23 @@ try {
     await waitFor(`!!document.querySelector('#cs-launcher')`);
     await evaluate(`document.querySelector('#cs-launcher').click()`);
     await waitFor(`document.querySelector('.cs-time .cs-value')?.textContent==='15:05'`);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('.cs-user .cs-card')].map(node=>node.classList[1])`), ['cs-appearance','cs-outfit','cs-inventory','cs-cycle','cs-meters','cs-location','cs-notes','cs-date','cs-time','cs-weather']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('.cs-meter-track')].map(node=>node.getAttribute('aria-valuenow'))`), ['0','14','0']);
+    assert.equal(await evaluate(`document.querySelector('.cs-meter-pain .cs-meter-comment').textContent`), 'ничего не болит');
+    assert.equal(await evaluate(`new Set([...document.querySelectorAll('.cs-meter-track > div')].map(node=>getComputedStyle(node).backgroundColor)).size`), 3);
+    assert.equal(await evaluate(`document.querySelectorAll('.cs-meters').length`), 1);
+    // Outfit folds with native keyboard controls; its preference is saved per person/chat.
+    assert.equal(await evaluate(`document.querySelector('.cs-outfit').open`), true);
+    const expandedHeight = await evaluate(`document.querySelector('.cs-outfit').getBoundingClientRect().height`);
+    await evaluate(`document.querySelector('.cs-outfit-summary').click()`);
+    await waitFor(`(await readPrefs()).people['@user']?.outfitCollapsed===true`);
+    assert.ok(await evaluate(`document.querySelector('.cs-outfit').getBoundingClientRect().height<${expandedHeight}`));
+    await evaluate(`document.querySelector('.cs-outfit-summary').focus()`);
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13 });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 });
+    await waitFor(`(await readPrefs()).people['@user']?.outfitCollapsed===false`);
+    await evaluate(`document.querySelector('.cs-outfit-summary').click()`);
+    await waitFor(`(await readPrefs()).people['@user']?.outfitCollapsed===true`);
     assert.equal(await evaluate(`document.querySelectorAll('.cs-choice').length`), 2); // user + Camilla
     assert.equal(await evaluate(`!!document.querySelector('.cs-layout .cs-state')`), false);
     assert.equal(await evaluate(`!!document.querySelector('.cs-ornament')||!!document.querySelector('.cs-scene-label')`), false);
@@ -129,9 +148,15 @@ try {
     // Block values are rendered as text, never as executable HTML.
     await evaluate(`ctx.chat[0].mes+='<user_stats><inventory>&lt;img src=x onerror=alert(1)&gt;</inventory></user_stats>';emit('MESSAGE_EDITED')`);
     await waitFor(`document.querySelector('.cs-inventory .cs-value')?.textContent.includes('onerror')`);
+    assert.equal(await evaluate(`document.querySelector('.cs-outfit').open`), false, 'folding survives message rerenders');
     assert.equal(await evaluate(`document.querySelectorAll('.cs-inventory img').length`), 0);
     await evaluate(`ctx.chat[0].mes=ctx.chat[0].mes.replace(/<user_stats><inventory>&lt;img[\\s\\S]*$/,'');emit('MESSAGE_EDITED')`);
     await waitFor(`!document.querySelector('.cs-inventory .cs-value')?.textContent.includes('onerror')`);
+    await evaluate(`var meterFixtureScene=ctx.chat[0].mes;ctx.chat[0].mes+='<user_stats><arousal>Unknown &lt;img src=x onerror=alert(1)&gt;</arousal></user_stats>';emit('MESSAGE_EDITED')`);
+    await waitFor(`document.querySelector('.cs-meter-arousal .cs-meter-comment')?.textContent.includes('onerror')`);
+    assert.equal(await evaluate(`document.querySelectorAll('.cs-meters img,.cs-meter-arousal [role=progressbar]').length`), 0);
+    await evaluate(`ctx.chat[0].mes=meterFixtureScene;emit('MESSAGE_EDITED')`);
+    await waitFor(`document.querySelector('.cs-meter-arousal [role=progressbar]')?.getAttribute('aria-valuenow')==='0'`);
     await evaluate(`document.querySelector('.cs-birthday-edit').click();document.querySelector('.cs-birthday-input').value='20 июня';document.querySelector('.cs-birthday-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));document.querySelector('.cs-notes-input').value='День рождения: 20 июня.\\nВзять камеру.';document.querySelector('.cs-notes-save').click()`);
     await waitFor(`document.querySelector('.cs-birthday-edit')?.textContent==='20 июня'`);
     assert.ok(await evaluate(`document.querySelector('.cs-notes-input').value.includes('Взять камеру')`));
@@ -141,17 +166,35 @@ try {
     assert.equal(await evaluate(`document.querySelector('.cs-state .cs-value').textContent`), 'В метро по пути на съёмку');
     assert.equal(await evaluate(`!!document.querySelector('.cs-inventory')||!!document.querySelector('.cs-cycle')||!!document.querySelector('.cs-location')`), false);
     assert.equal(await evaluate(`document.querySelector('.cs-presence').textContent`), 'Вне сцены');
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('.cs-npc .cs-card')].map(node=>node.classList[1])`), ['cs-appearance','cs-outfit','cs-state','cs-meters','cs-notes','cs-date','cs-time','cs-weather']);
+    assert.deepEqual(await evaluate(`[...document.querySelectorAll('.cs-meter-track')].map(node=>node.getAttribute('aria-valuenow'))`), ['42','18','0']);
+    assert.ok(await evaluate(`document.querySelector('.cs-meter-arousal .cs-meter-comment').textContent.includes('самоконтролем')`));
+    assert.equal(await evaluate(`document.querySelector('.cs-outfit').open`), true, 'NPC outfit has an independent preference');
+    await evaluate(`document.querySelector('.cs-outfit-summary').click()`);
+    await waitFor(`(await readPrefs()).people['Ло']?.outfitCollapsed===true`);
     assert.ok((await evaluate(`document.querySelector('.cs-appearance .cs-value').textContent`)).includes('adult'));
     assert.equal(await evaluate(`document.querySelector('.cs-appearance h3').textContent`), 'Внешность');
     assert.ok(await evaluate(`document.querySelector('.cs-state').getBoundingClientRect().top-document.querySelector('.cs-outfit').getBoundingClientRect().bottom<=12`), 'NPC state follows outfit without a separate empty grid row');
-    assert.equal(await evaluate(`document.querySelector('.cs-state').nextElementSibling.classList.contains('cs-notes')`),true);
+    assert.equal(await evaluate(`document.querySelector('.cs-state').nextElementSibling.classList.contains('cs-meters')`),true);
+    assert.equal(await evaluate(`document.querySelector('.cs-meters').nextElementSibling.classList.contains('cs-notes')`),true);
     assert.equal(await evaluate(`document.querySelector('.cs-notes-input').value`),'');
     await evaluate(`document.querySelector('.cs-notes-input').value='Знаком с Алисой';document.querySelector('.cs-notes-save').click()`);
     await screenshot('npc.png');
     // Theme changes are live, including contrast on a light theme.
     await evaluate(`document.documentElement.style.setProperty('--SmartThemeBlurTintColor','#f4efe3');document.documentElement.style.setProperty('--SmartThemeBodyColor','#29251d');document.documentElement.style.setProperty('--SmartThemeQuoteColor','#80572a')`);
     await screenshot('light.png');
+    assert.equal(await evaluate(`new Set([...document.querySelectorAll('.cs-meter-track > div')].map(node=>getComputedStyle(node).backgroundColor)).size`), 3);
     await evaluate(`document.documentElement.removeAttribute('style');document.querySelector('.cs-choice').click()`);
+    // Meters can be hidden independently without changing the supplied story data.
+    await evaluate(`document.querySelector('[aria-label="Настройки"]').click()`);
+    await waitFor(`!!document.querySelector('.cs-settings')`);
+    await evaluate(`var painCheck=[...document.querySelectorAll('.cs-checkbox')].find(label=>label.textContent==='Боль').querySelector('input');painCheck.checked=false;painCheck.dispatchEvent(new Event('change'));document.querySelector('[aria-label="Назад"]').click()`);
+    assert.equal(await evaluate(`document.querySelectorAll('.cs-meter').length`), 2);
+    assert.equal(await evaluate(`!!document.querySelector('.cs-meter-pain')`), false);
+    await evaluate(`document.querySelector('[aria-label="Настройки"]').click()`);
+    await waitFor(`!!document.querySelector('.cs-settings')`);
+    await evaluate(`var painCheck=[...document.querySelectorAll('.cs-checkbox')].find(label=>label.textContent==='Боль').querySelector('input');painCheck.checked=true;painCheck.dispatchEvent(new Event('change'));document.querySelector('[aria-label="Назад"]').click()`);
+    assert.equal(await evaluate(`document.querySelectorAll('.cs-meter').length`), 3);
     // Alias editor and local display names survive reopening settings.
     await evaluate(`document.querySelector('[aria-label="Настройки"]').click()`);
     await waitFor(`!!document.querySelector('.cs-settings')`);
@@ -197,6 +240,8 @@ try {
     assert.equal(savedBackup.settings.people['@user'].birthday, '20 июня');
     assert.ok(savedBackup.settings.people['@user'].notes.includes('Взять камеру'));
     assert.equal(savedBackup.settings.people['Ло'].notes,'Знаком с Алисой');
+    assert.equal(savedBackup.settings.people['@user'].outfitCollapsed, true);
+    assert.equal(savedBackup.settings.people['Ло'].outfitCollapsed, true);
     await evaluate(`document.querySelector('.cs-settings input[type=text]').value='Изменено';document.querySelector('.cs-primary').click();window.confirm=()=>true;[...document.querySelectorAll('.cs-settings button')].find(b=>b.textContent==='Импорт').click()`);
     await chooseFile(exported);
     await waitFor(`(await window.readPrefs()).people['Ло'].displayName==='Капитан'`);
@@ -228,7 +273,7 @@ try {
     assert.ok(await evaluate(`getComputedStyle(document.querySelector('.cs-portrait-image img')).objectFit==='cover'`));
     await screenshot('user-portrait.png');
     // Reproduce the long real-world user fields at the Roleplay Tools panel width.
-    const longUser = `<user_stats><basic_info>Алиса's appearance: 19 лет (день рождения 20 июня); 172 см; 48 кг; стройная; B-cup; человек; длинные прямые рыжие волосы до бёдер, чёлка; большие округлые зелёные глаза; три маленьких родинки треугольником на тыльной стороне левой руки; летние веснушки на коленях; запах лилий.</basic_info><outfit>Причёска: Распущенные, уложенные для съёмки;\nВерх: Длинный объёмный вязаный свитер с узором из ёлок и снежинок;\nНиз: Тёмные облегающие брюки;\nНижнее бельё: Комплект белья;\nОбувь: Сапожки орехового цвета с мехом;\nАксессуары: Матовые серьги из чернёного серебра;</outfit><inventory>Алиса's inventory: сумочка, телефон, ключи от квартиры и повседневная одежда (в комнате подготовки).</inventory><cycle>Day: 8/28, фолликулярная фаза; Pregnancy: No; Risk: None</cycle></user_stats><char_stats><char_info>Ло: 19 лет; 191 см; 78 кг; стройный; человек; короткие чёрные волосы; серые глаза; многочисленные татуировки на руках, плечах, груди и спине; небольшая бородка; золотые серьги-кольца.</char_info><char_outfit>Outfit = Ло: Тёмная рубашка поверх чёрной футболки, джинсы, кроссовки и рюкзак</char_outfit><char_notes>State = Ло: смотрит всю съёмку Алисы и ждёт её у двери комнаты подготовки с рюкзаком и сидром</char_notes><char_mood>Mood = Ло: спокойный, гордый за Алису, нетерпеливый</char_mood></char_stats><general_stats><location>Нью-Йорк, Манхэттен, Парк-авеню (Дом Скандинавии, галерея у входа в комнату подготовки)</location><date>Четверг, 05.11.26</date><time>16:50</time><weather>Ясный ранний ноябрьский вечер 🌆</weather></general_stats>`;
+    const longUser = `<user_stats><basic_info>Алиса's appearance: 19 лет (день рождения 20 июня); 172 см; 48 кг; стройная; B-cup; человек; длинные прямые рыжие волосы до бёдер, чёлка; большие округлые зелёные глаза; три маленьких родинки треугольником на тыльной стороне левой руки; летние веснушки на коленях; запах лилий.</basic_info><outfit>Причёска: Распущенные, уложенные для съёмки;\nВерх: Длинный объёмный вязаный свитер с узором из ёлок и снежинок;\nНиз: Тёмные облегающие брюки;\nНижнее бельё: Комплект белья;\nОбувь: Сапожки орехового цвета с мехом;\nАксессуары: Матовые серьги из чернёного серебра;</outfit><inventory>Алиса's inventory: сумочка, телефон, ключи от квартиры и повседневная одежда (в комнате подготовки).</inventory><cycle>Day: 8/28, фолликулярная фаза; Pregnancy: No; Risk: None</cycle>${userMeters}</user_stats><char_stats><char_info>Ло: 19 лет; 191 см; 78 кг; стройный; человек; короткие чёрные волосы; серые глаза; многочисленные татуировки на руках, плечах, груди и спине; небольшая бородка; золотые серьги-кольца.</char_info><char_outfit>Outfit = Ло: Тёмная рубашка поверх чёрной футболки, джинсы, кроссовки и рюкзак</char_outfit><char_notes>State = Ло: смотрит всю съёмку Алисы и ждёт её у двери комнаты подготовки с рюкзаком и сидром</char_notes><char_mood>Mood = Ло: спокойный, гордый за Алису, нетерпеливый</char_mood>${npcMeters}</char_stats><general_stats><location>Нью-Йорк, Манхэттен, Парк-авеню (Дом Скандинавии, галерея у входа в комнату подготовки)</location><date>Четверг, 05.11.26</date><time>16:50</time><weather>Ясный ранний ноябрьский вечер 🌆</weather></general_stats>`;
     await evaluate(`ctx.chat=[{mes:${JSON.stringify(longUser)}}];emit('MESSAGE_EDITED')`);
     await waitFor(`document.querySelector('.cs-outfit .cs-value')?.textContent.includes('Сапожки')`);
     try {
@@ -256,10 +301,30 @@ try {
     const npcPanel=await rect('#cs-panel');const npcShot=await send('Page.captureScreenshot',{format:'png',clip:{x:npcPanel.x,y:npcPanel.y,width:npcPanel.width,height:npcPanel.height,scale:1}});await writeFile(path.join(out,'npc-narrow-unchanged.png'),Buffer.from(npcShot.data,'base64'));
     await evaluate(`document.querySelector('.cs-choice').click();document.querySelector('#heading-theme-fixture').remove();document.querySelector('#cs-panel').style.width='1000px'`);
 
+    // Review screenshots use the real UI and the same theme/assets as the extension.
+    await send('Emulation.setDeviceMetricsOverride', { width: 1100, height: 1640, deviceScaleFactor: 1, mobile: false });
+    await evaluate(`Object.assign(document.querySelector('#cs-panel').style,{width:'650px',height:'1500px',left:'24px',top:'24px'});document.querySelector('.cs-body').scrollTop=0`);
+    const profilePanel=await rect('#cs-panel');
+    const profileShot=await send('Page.captureScreenshot',{format:'png',clip:{x:profilePanel.x,y:profilePanel.y,width:profilePanel.width,height:profilePanel.height,scale:1}});
+    await writeFile(path.join(out,'profile-user-meters.png'),Buffer.from(profileShot.data,'base64'));
+    const metersArea=await evaluate(`(()=>{const first=document.querySelector('.cs-cycle').getBoundingClientRect(),last=document.querySelector('.cs-location').getBoundingClientRect();return {x:first.x,y:first.y,width:first.width,height:last.bottom-first.y}})()`);
+    const metersShot=await send('Page.captureScreenshot',{format:'png',clip:{...metersArea,scale:1}});
+    await writeFile(path.join(out,'user-meters-detail.png'),Buffer.from(metersShot.data,'base64'));
+    await evaluate(`[...document.querySelectorAll('.cs-choice')].find(b=>b.textContent.includes('Капитан')).click()`);
+    const npcProfilePanel=await rect('#cs-panel');
+    const npcProfileShot=await send('Page.captureScreenshot',{format:'png',clip:{x:npcProfilePanel.x,y:npcProfilePanel.y,width:npcProfilePanel.width,height:npcProfilePanel.height,scale:1}});
+    await writeFile(path.join(out,'profile-npc-meters.png'),Buffer.from(npcProfileShot.data,'base64'));
+    const npcMetersArea=await evaluate(`(()=>{const first=document.querySelector('.cs-state').getBoundingClientRect(),last=document.querySelector('.cs-notes').getBoundingClientRect();return {x:first.x,y:first.y,width:first.width,height:last.bottom-first.y}})()`);
+    const npcMetersShot=await send('Page.captureScreenshot',{format:'png',clip:{...npcMetersArea,scale:1}});
+    await writeFile(path.join(out,'npc-meters-detail.png'),Buffer.from(npcMetersShot.data,'base64'));
+    await evaluate(`document.querySelector('.cs-choice').click();Object.assign(document.querySelector('#cs-panel').style,{width:'1000px',height:'auto',top:'16px'})`);
+    await send('Emulation.setDeviceMetricsOverride', { width: 1400, height: 1050, deviceScaleFactor: 1, mobile: false });
+
     // Changing a swipe removes old scene fields and updates the selected outfit.
     await evaluate(`ctx.chat[0].mes='<user_stats><outfit>Новое платье</outfit></user_stats>';emit('MESSAGE_SWIPED')`);
     await waitFor(`document.querySelector('.cs-outfit .cs-value')?.textContent==='Новое платье'`);
     assert.equal(await evaluate(`!!document.querySelector('.cs-time')`), false);
+    assert.equal(await evaluate(`!!document.querySelector('.cs-meters')`), false, 'swiped-away stats do not survive as fabricated zeroes');
     await evaluate(`ctx.chat=[];emit('MESSAGE_DELETED')`);
     await waitFor(`document.querySelector('.cs-outfit .cs-value')?.textContent==='Нет данных'`);
     await evaluate(`ctx.chatId='chat-two';emit('CHAT_CHANGED')`);
@@ -267,12 +332,14 @@ try {
     assert.equal(await evaluate(`document.querySelectorAll('.cs-choice').length`), 1);
     assert.equal(await evaluate(`document.querySelector('.cs-notes-input').value`),'');
     assert.equal(await evaluate(`document.querySelector('.cs-birthday-edit').textContent`),'Указать');
+    assert.equal(await evaluate(`document.querySelector('.cs-outfit').open`), true, 'new chats start with outfit expanded');
     await evaluate(`ctx.chatId='chat-one';emit('CHAT_CHANGED')`);
     await waitFor(`document.querySelector('.cs-birthday-edit')?.textContent==='20 июня'`);
+    assert.equal(await evaluate(`document.querySelector('.cs-outfit').open`), false, 'returning to a chat restores its folded outfit');
     assert.ok(await evaluate(`document.querySelector('.cs-notes-input').value.includes('Взять камеру')`));
     await evaluate(`ctx.chatId='chat-two';emit('CHAT_CHANGED')`);
     await waitFor(`document.querySelector('.cs-birthday-edit')?.textContent==='Указать'`);
-    await evaluate(`ctx.chat[0]={mes:'<user_stats><outfit>Кардиган и клетчатая юбка</outfit><inventory>Сумка, телефон, ключи</inventory><cycle>Day: 8/28, текущая фаза; Pregnancy: No; Risk: None</cycle></user_stats><general_stats><location>Внутренний сад</location><date>Чт, 05.11.26</date><time>15:05</time><weather>Ясно ☀</weather></general_stats>'};emit('MESSAGE_RECEIVED')`);
+    await evaluate(`ctx.chat[0]={mes:'<user_stats><outfit>Кардиган и клетчатая юбка</outfit><inventory>Сумка, телефон, ключи</inventory><cycle>Day: 8/28, текущая фаза; Pregnancy: No; Risk: None</cycle>${userMeters}</user_stats><general_stats><location>Внутренний сад</location><date>Чт, 05.11.26</date><time>15:05</time><weather>Ясно ☀</weather></general_stats>'};emit('MESSAGE_RECEIVED')`);
     await waitFor(`document.querySelector('.cs-time .cs-value')?.textContent==='15:05'`);
     // Mobile remains reachable without page-level horizontal scrolling.
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
@@ -313,6 +380,11 @@ try {
     assert.equal(await evaluate(`document.querySelector('.cs-notes-input').value`), 'Запись на диске');
     await waitFor(`document.querySelector('.cs-portrait-image img')?.naturalHeight===300`);
     // Server failures never show Saved; retry uses the same in-memory text.
+    await evaluate(`ctx.chatId='chat-one';emit('CHAT_CHANGED')`);
+    await waitFor(`document.querySelector('.cs-birthday-edit')?.textContent==='20 июня'`);
+    assert.equal(await evaluate(`document.querySelector('.cs-outfit').open`), false, 'folded outfit survives a full page reload');
+    await evaluate(`ctx.chatId='chat-two';emit('CHAT_CHANGED')`);
+    await waitFor(`document.querySelector('.cs-birthday-edit')?.textContent==='07.11.2001'`);
     rejectUploads = true;
     await evaluate(`document.querySelector('.cs-notes-input').value='Повтор после ошибки';document.querySelector('.cs-notes-input').dispatchEvent(new Event('input'));document.querySelector('.cs-notes-save').click()`);
     await waitFor(`document.querySelector('.cs-notice').textContent.includes('Не удалось подтвердить')`);
