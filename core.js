@@ -42,6 +42,31 @@ export function displayName(name, settings = {}, profile = {}) {
     return settings.people?.[name]?.displayName || profile.displayNames?.[resolveOwner(name, {}, profile)] || name;
 }
 
+const CHAR_TAGS = [
+    ['char_info', 'info', 'Info'], ['char_outfit', 'outfit', 'Outfit'],
+    ['char_notes', 'state', 'State'], ['char_mood', 'mood', 'Mood'],
+    ['char_arousal', 'arousal', 'Arousal'], ['char_fatigue', 'fatigue', 'Fatigue'], ['char_pain', 'pain', 'Pain'],
+];
+const presenceNames = raw => clean(raw).replace(/\([^)]*\)/g, '').replace(/[.。]\s*$/, '').split(/[,;\n]+/).map(clean).filter(Boolean);
+const presenceParts = value => value.split(/\s+(?:and|и|&)\s+|\s*&\s*/i).map(clean).filter(Boolean);
+
+// A character the model forgot to add to char_info is still a real boundary when
+// the same "Name:" header opens a segment in two or more fields, or the name is
+// listed in char_around. A one-off "; label:" inside a description is neither.
+function corroboratedNames(chars, presence) {
+    const seen = new Map();
+    for (const [tag, , prefix] of CHAR_TAGS) {
+        if (tag === 'char_info') continue;
+        for (const key of new Set(namedSegments(block(chars, tag), prefix).map(entry => nameKey(entry.name)))) {
+            if (!seen.has(key)) seen.set(key, { count: 0 });
+            seen.get(key).count++;
+        }
+    }
+    const around = presence === null ? [] : presenceNames(presence).flatMap(value => [value, ...presenceParts(value)]).map(nameKey);
+    const present = new Set(around);
+    return [...seen].filter(([key, item]) => item.count >= 2 || present.has(key)).map(([key]) => key);
+}
+
 export function parseMessage(raw, knownNames = []) {
     // Reasoning is never a source of established scene facts.
     const text = String(raw ?? '').replace(/<(think|thinking|analysis)>[\s\S]*?<\/\1>/gi, '');
@@ -54,6 +79,8 @@ export function parseMessage(raw, knownNames = []) {
             const value = block(user, field);
             if (value !== null) result.user[field] = value;
         }
+        // "Name's inventory:" / "Инвентарь Имени:" is a label, not a possession.
+        if (result.user.inventory) result.user.inventory = clean(result.user.inventory.replace(/^(?:(?:[^:;\n]{1,80}?['’]s\s+)?inventory|инвентарь(?:\s+[^:;\n]{1,60})?)\s*:\s*/i, ''));
         const info = block(user, 'basic_info');
         const name = info?.match(/^(.+?)(?:['’]s\s+appearance|\s*:\s*(?:appearance|внешность))\s*:/i);
         if (name) result.name = clean(name[1]);
@@ -65,17 +92,14 @@ export function parseMessage(raw, knownNames = []) {
             if (value !== null) result.scene[field] = value;
         }
         const around = block(general, 'char_around');
-        if (around !== null) result.presence = around.replace(/^Characters\s+around\s*:\s*/i, '');
+        // Names never contain a colon, so any short leading "Label:" is a prefix in whatever language.
+        if (around !== null) result.presence = around.replace(/^[^:,;\n()]{1,40}:\s*/, '');
     }
     if (chars !== null) {
         const people = new Map();
         const infoNames = namedSegments(block(chars, 'char_info'), 'Info').map(entry => entry.name);
-        const hints = infoNames.length ? [...knownNames, ...infoNames] : [];
-        for (const [tag, field, prefix] of [
-            ['char_info', 'info', 'Info'], ['char_outfit', 'outfit', 'Outfit'],
-            ['char_notes', 'state', 'State'], ['char_mood', 'mood', 'Mood'],
-            ['char_arousal', 'arousal', 'Arousal'], ['char_fatigue', 'fatigue', 'Fatigue'], ['char_pain', 'pain', 'Pain'],
-        ]) {
+        const hints = infoNames.length ? [...knownNames, ...infoNames, ...corroboratedNames(chars, result.presence)] : [];
+        for (const [tag, field, prefix] of CHAR_TAGS) {
             for (const entry of namedSegments(block(chars, tag), prefix, tag === 'char_info' ? [] : hints)) {
                 const key = nameKey(entry.name);
                 if (!people.has(key)) people.set(key, { name: entry.name, fields: {} });
@@ -96,12 +120,14 @@ export function presenceFor(name, raw, settings = {}, profile = {}) {
     if (raw === null) return 'unknown';
     const owner = resolveOwner(name, settings, profile);
     // Parentheses may describe absent people; do not count their names as present.
-    const list = clean(raw).replace(/\([^)]*\)/g, '').replace(/[.。]\s*$/, '');
-    const names = list.split(/[,;\n]+/).map(clean).filter(Boolean);
-    return names.some(value => nameKey(resolveOwner(value, settings, profile)) === nameKey(owner)) ? 'present' : 'absent';
+    const matches = value => nameKey(resolveOwner(value, settings, profile)) === nameKey(owner);
+    // A whole entry wins first, so a name that itself contains "and" still matches.
+    return presenceNames(raw).some(value => matches(value) || presenceParts(value).some(matches)) ? 'present' : 'absent';
 }
 
-export function replay(messages, settings = {}, profile = {}, userName = 'User') {
+// `cache` is an optional WeakMap keyed by message object. A message is parsed again
+// only when its text (edit, swipe) or the set of known names has changed.
+export function replay(messages, settings = {}, profile = {}, userName = 'User', cache = null) {
     const state = { user: { name: userName, fields: {} }, scene: {}, characters: Object.create(null), presence: null, source: null };
     const assign = (target, values, source) => {
         for (const [key, value] of Object.entries(values)) target[key] = { value, source };
@@ -113,7 +139,13 @@ export function replay(messages, settings = {}, profile = {}, userName = 'User')
             ...Object.keys(settings.people || {}), ...Object.values(settings.people || {}).flatMap(item => item.aliases || []),
             ...Object.keys(profile.aliases || {}), ...Object.values(profile.aliases || {}).flat(),
         ];
-        const parsed = parseMessage(message.mes, knownNames);
+        const names = cache ? knownNames.join('\u0000') : '';
+        let entry = cache?.get(message);
+        if (!entry || entry.mes !== message.mes || entry.names !== names) {
+            entry = { mes: message.mes, names, parsed: parseMessage(message.mes, knownNames) };
+            cache?.set(message, entry);
+        }
+        const parsed = entry.parsed;
         const source = index + 1;
         if (parsed.name) state.user.name = parsed.name;
         assign(state.user.fields, parsed.user, source);
