@@ -68,7 +68,6 @@
 #cs-panel .cs-avatar img { width: 100%; height: 100%; object-fit: cover; position: absolute; inset: 0; }
 #cs-panel .cs-layout { display: flex; flex-direction: column; gap: 12px; }
 #cs-panel .cs-upper { display: grid; grid-template-columns: 234px minmax(0, 1fr); gap: 18px; align-items: center; }
-#cs-panel .cs-npc .cs-upper { align-items: start; }
 #cs-panel .cs-details { display: grid; gap: 10px; min-width: 0; }
 #cs-panel .cs-portrait { position: relative; width: 234px; align-self: center; margin: 0; border: 1px solid var(--cs-border); border-radius: 14px; padding: 6px; background: var(--cs-bg); }
 #cs-panel .cs-portrait::after { content: ''; position: absolute; inset: 3px; border: 1px solid var(--cs-border); border-radius: 11px; pointer-events: none; }
