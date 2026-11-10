@@ -7,7 +7,6 @@ export const ICON_FILES = {
     'clipboard-list': './assets/icons/clipboard-list.svg',
     'feather-pointed': './assets/icons/clipboard-list.svg',
     'location-dot': './assets/icons/map-pin.svg',
-    activity: './assets/icons/activity.svg',
     'calendar-days': './assets/icons/calendar-days.svg',
     clock: './assets/icons/clock.svg',
     'cloud-sun': './assets/icons/cloud-sun.svg',
