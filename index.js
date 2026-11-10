@@ -65,7 +65,7 @@ const WORDS = {
         unsaved: 'Unsaved changes', squareOnly: 'NPC portraits must be square. The previous portrait has been kept.',
     },
 };
-const ICONS = { appearance: 'clipboard-list', outfit: 'shirt', inventory: 'bag-shopping', cycle: 'sparkle', state: 'activity', location: 'location-dot', date: 'calendar-days', time: 'clock', weather: 'cloud-sun' };
+const ICONS = { appearance: 'clipboard-list', outfit: 'shirt', inventory: 'bag-shopping', cycle: 'sparkle', state: 'location-dot', location: 'location-dot', date: 'calendar-days', time: 'clock', weather: 'cloud-sun' };
 let settings = defaults(), state, activeKey = null, profile = {}, settingsOpen = false, editingPerson = '@user';
 let panel, body, title, launcher, notice, settingsButton, pickerHost, lastShared = [], pendingRefresh;
 let refreshId = 0, storageWarning = '', storageLoadFailed = false, stale = false;
@@ -300,9 +300,12 @@ function renderCharacter() {
         identity.append(status);
     }
     details.append(identity);
-    if (settings.visible.appearance && fields.info) details.append(card('appearance', fields.info));
+    // NPC: the square portrait sits beside the identity only; appearance follows at full width.
+    const appearance = settings.visible.appearance && fields.info ? card('appearance', fields.info) : null;
+    if (appearance && isUser) details.append(appearance);
     if (isUser) for (const field of ['outfit', 'inventory']) if (settings.visible[field]) details.append(card(field, fields[field]));
     upper.append(portrait, details); layout.append(upper);
+    if (appearance && !isUser) layout.append(appearance);
     if (!isUser) for (const field of ['outfit', 'state']) if (settings.visible[field] && fields[field]) layout.append(card(field, fields[field]));
     if (isUser && settings.visible.cycle) layout.append(card('cycle', fields.cycle));
     const meters = meterCard(fields);
