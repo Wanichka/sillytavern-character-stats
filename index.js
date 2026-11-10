@@ -65,10 +65,11 @@ const WORDS = {
         unsaved: 'Unsaved changes', squareOnly: 'NPC portraits must be square. The previous portrait has been kept.',
     },
 };
-const ICONS = { appearance: 'clipboard-list', outfit: 'shirt', inventory: 'bag-shopping', cycle: 'sparkle', state: 'location-dot', location: 'location-dot', date: 'calendar-days', time: 'clock', weather: 'cloud-sun' };
+const ICONS = { appearance: 'clipboard-list', outfit: 'shirt', inventory: 'bag-shopping', cycle: 'sparkle', state: 'activity', location: 'location-dot', date: 'calendar-days', time: 'clock', weather: 'cloud-sun' };
 let settings = defaults(), state, activeKey = null, profile = {}, settingsOpen = false, editingPerson = '@user';
-let panel, body, title, launcher, notice, settingsButton, pickerHost, lastShared = '', pendingRefresh;
-let refreshId = 0, storageWarning = '', storageLoadFailed = false;
+let panel, body, title, launcher, notice, settingsButton, pickerHost, lastShared = [], pendingRefresh;
+let refreshId = 0, storageWarning = '', storageLoadFailed = false, stale = false;
+const parseCache = new WeakMap();
 const settingsStore = createFileSettingsStore({ fetch: (...args) => window.fetch(...args), getRequestHeaders: () => context()?.getRequestHeaders?.() || { 'Content-Type': 'application/json' }, hash: getStringHash, legacy: createSettingsStore(window) });
 const readableStorage = { getItem(key) { try { return window.localStorage.getItem(key); } catch { return null; } } };
 const context = () => window.SillyTavern?.getContext?.() || null;
@@ -134,7 +135,7 @@ function allNames() {
     return [...names.values()];
 }
 async function refresh() {
-    const request = ++refreshId;
+    const request = ++refreshId; stale = false;
     const ctx = context();
     const key = chatKey(ctx);
     const changed = key !== activeKey || storageLoadFailed;
@@ -151,14 +152,36 @@ async function refresh() {
     }
     profile = sharedProfile(readableStorage, ctx, settings);
     lastShared = sharedSignature();
-    state = replay(key ? ctx?.chat || [] : [], settings, profile, ctx?.name1 || t('user'));
+    state = replay(key ? ctx?.chat || [] : [], settings, profile, ctx?.name1 || t('user'), parseCache);
     const roster = allNames();
     if (JSON.stringify(roster) !== JSON.stringify(settings.roster)) { settings.roster = roster; persist(); }
     if (settings.selected !== '@user' && !roster.some(name => name === settings.selected)) settings.selected = '@user';
     render();
 }
-function scheduleRefresh() { clearTimeout(pendingRefresh); pendingRefresh = setTimeout(refresh, 80); }
-function sharedSignature() { return `${readableStorage.getItem('ct_profiles_v1') || ''}|${readableStorage.getItem('ct_cardmap_v2') || ''}`; }
+// A closed panel does no work: it is marked stale and rebuilt when it is next shown.
+const panelVisible = () => !!panel && !panel.hidden && panel.getClientRects().length > 0;
+function scheduleRefresh() {
+    if (!panelVisible()) { stale = true; return; }
+    clearTimeout(pendingRefresh); pendingRefresh = setTimeout(refresh, 80);
+}
+// Character Thoughts 1.3.11+ bumps a tiny revision key on every shared change. Older
+// versions fall back to comparing the stored records, which may hold megabytes of avatars.
+function sharedSignature() {
+    const revision = readableStorage.getItem('ct_shared_rev');
+    return revision ? [revision] : [readableStorage.getItem('ct_profiles_v1') || '', readableStorage.getItem('ct_cardmap_v2') || ''];
+}
+function sharedChanged() {
+    const current = sharedSignature();
+    return current.length !== lastShared.length || current.some((value, index) => value !== lastShared[index]);
+}
+function checkShared() {
+    if (!panelVisible()) { stale = true; return; }
+    if (chatKey(context()) !== activeKey || stale) { refresh(); return; }
+    if (sharedChanged()) {
+        if (settingsOpen) { notify(t('sharedUpdated')); return; }
+        refresh();
+    }
+}
 
 function avatarSources(name) {
     const ownImage = settings.people[name]?.image;
@@ -324,6 +347,11 @@ function notesCard(owner) {
         settings.people[owner] = { ...settings.people[owner], notes: input.value.slice(0, 2000) };
         status.textContent = t('unsaved');
     });
+    // The field grows with its text. Browsers without field-sizing get a measured height.
+    if (!globalThis.CSS?.supports?.('field-sizing', 'content')) {
+        const fit = () => { input.style.height = 'auto'; input.style.height = `${input.scrollHeight}px`; };
+        input.addEventListener('input', fit); requestAnimationFrame(fit);
+    }
     heading.append(status, save); node.append(heading, input); return node;
 }
 
@@ -613,14 +641,9 @@ function createUI() {
         } else if (event.key?.startsWith('ct_')) scheduleRefresh();
     });
     // localStorage events do not fire in the same page when Thoughts changes a set.
-    setInterval(() => {
-        if (panel.style.display === 'none' || panel.hidden) return;
-        if (chatKey(context()) !== activeKey) { refresh(); return; }
-        if (sharedSignature() !== lastShared) {
-            if (settingsOpen) { notify(t('sharedUpdated')); return; }
-            refresh();
-        }
-    }, 2000);
+    // The interval remains as a fallback for older Character Thoughts versions.
+    window.addEventListener('wani-character-thoughts:changed', checkShared);
+    setInterval(checkShared, 2000);
     refresh();
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', createUI, { once: true });
