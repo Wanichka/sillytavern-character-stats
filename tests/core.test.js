@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clean, nameKey, parseMessage, namedSegments, replay, cycleDetails, meterDetails, resolveOwner, validateAliases, ageFromInfo } from '../core.js';
+import { clean, nameKey, parseMessage, namedSegments, replay, presenceFor, cycleDetails, meterDetails, resolveOwner, validateAliases, ageFromInfo } from '../core.js';
 import { chatKey, loadSettings, sharedProfile, backup, importBackup, defaults, createSettingsStore } from '../storage.js';
 
 const assistant = mes => ({ mes });
@@ -213,4 +213,53 @@ test('outfit collapse and per-meter visibility are chat-local, portable settings
     assert.equal(restored.visible.pain, false); assert.equal(restored.visible.arousal, true); assert.equal(restored.visible.fatigue, true);
     assert.equal(importBackup({ format: 'wani-character-stats', version: 1, settings: { people: { A: { outfitCollapsed: 'true' } } } }).people.A.outfitCollapsed, false);
     assert.equal(defaults().people['@user'], undefined); assert.equal(defaults().visible.pain, true);
+});
+
+test('a new NPC missing from char_info is kept when another field or char_around confirms the name', () => {
+    const info = '<char_info>Law: tall ; Kid: red hair</char_info>';
+    const byFields = parseMessage(chars(`${info}<char_outfit>Outfit = Law: coat ; Kid: goggles ; Bepo: orange jumpsuit</char_outfit><char_mood>Mood = Law: calm ; Kid: loud ; Bepo: sleepy</char_mood>`));
+    assert.deepEqual(byFields.characters.map(item => item.name), ['Law', 'Kid', 'Bepo']);
+    assert.equal(byFields.characters[1].fields.outfit, 'goggles');
+    assert.equal(byFields.characters[2].fields.outfit, 'orange jumpsuit');
+    const byPresence = parseMessage(chars(`${info}<char_outfit>Outfit = Law: coat ; Kid: goggles ; Bepo: orange jumpsuit</char_outfit>`) + general('<char_around>Characters around: Law, Kid and Bepo</char_around>'));
+    assert.equal(byPresence.characters.find(item => item.name === 'Bepo').fields.outfit, 'orange jumpsuit');
+    // An uncorroborated "; label:" stays inside the description.
+    const label = parseMessage(chars(`${info}<char_outfit>Outfit = Law: coat ; Kid: goggles ; left hand: bandaged</char_outfit><char_mood>Mood = Law: calm ; Kid: loud</char_mood>`));
+    assert.deepEqual(label.characters.map(item => item.name), ['Law', 'Kid']);
+    assert.equal(label.characters[1].fields.outfit, 'goggles ; left hand: bandaged');
+});
+
+test('char_around accepts any-language prefixes and "and" / "и" / "&" between names', () => {
+    for (const raw of ['Characters around: Law, Kid', 'Персонажи рядом: Law, Kid', 'Рядом: Law и Kid', 'Law and Kid', 'Law & Kid', 'Law, Kid (Bepo is on the ship).']) {
+        const presence = parseMessage(general(`<char_around>${raw}</char_around>`)).presence;
+        assert.equal(presenceFor('Law', presence), 'present', raw);
+        assert.equal(presenceFor('Kid', presence), 'present', raw);
+        assert.equal(presenceFor('Bepo', presence), 'absent', raw);
+    }
+    assert.equal(presenceFor('Salt and Pepper', 'Salt and Pepper, Law'), 'present');
+    assert.equal(presenceFor('Law', null), 'unknown');
+});
+
+test('the replay cache reuses unchanged messages and re-parses edits and swipes', () => {
+    const first = assistant(user('<outfit>coat</outfit>')), second = assistant(chars('<char_info>Law: tall</char_info><char_outfit>Outfit = Law: hat</char_outfit>'));
+    const cache = new WeakMap(), messages = [first, second];
+    const plain = replay(messages), cached = replay(messages, {}, {}, 'User', cache);
+    assert.deepEqual(cached, plain);
+    const entry = cache.get(second);
+    assert.deepEqual(replay(messages, {}, {}, 'User', cache), plain);
+    assert.equal(cache.get(second), entry);
+    first.mes = user('<outfit>cloak</outfit>');
+    assert.equal(replay(messages, {}, {}, 'User', cache).user.fields.outfit.value, 'cloak');
+    assert.equal(cache.get(second), entry);
+    second.mes = chars('<char_info>Law: tall</char_info><char_outfit>Outfit = Law: cap</char_outfit>');
+    assert.equal(replay(messages, {}, {}, 'User', cache).characters.law.fields.outfit.value, 'cap');
+});
+
+test('the inventory label is removed and real contents are kept', () => {
+    const inventory = text => parseMessage(user(`<inventory>${text}</inventory>`)).user.inventory;
+    assert.equal(inventory("Alice's inventory: телефон на тумбочке."), 'телефон на тумбочке.');
+    assert.equal(inventory('Инвентарь Алисы: телефон'), 'телефон');
+    assert.equal(inventory('Inventory: phone; note: cracked'), 'phone; note: cracked');
+    assert.equal(inventory('phone: cracked; keys'), 'phone: cracked; keys');
+    assert.equal(inventory('None'), 'None');
 });
