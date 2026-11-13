@@ -403,11 +403,17 @@ function card(field, data, compact = false) {
         const cycle = cycleDetails(data.value);
         if (cycle) {
             const top = element('div', 'cs-cycle-top');
-            top.append(element('strong', '', `${t(cycle.week ? 'week' : 'day')} ${cycle.count}`), element('span', 'cs-cycle-phase', cycle.phase));
-            const track = element('div', 'cs-cycle-track');
-            track.setAttribute('role', 'progressbar'); track.setAttribute('aria-label', t('cycle'));
-            track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', '100'); track.setAttribute('aria-valuenow', String(Math.round(cycle.progress)));
-            const fill = element('div'); fill.style.width = `${cycle.progress}%`; track.append(fill);
+            const count = cycle.progress === null ? cycle.count : `${t(cycle.week ? 'week' : 'day')} ${cycle.count}`;
+            top.append(element('strong', '', count));
+            if (cycle.phase) top.append(element('span', 'cs-cycle-phase', cycle.phase));
+            node.append(top);
+            if (cycle.progress !== null) {
+                const track = element('div', 'cs-cycle-track');
+                track.setAttribute('role', 'progressbar'); track.setAttribute('aria-label', t('cycle'));
+                track.setAttribute('aria-valuemin', '0'); track.setAttribute('aria-valuemax', '100'); track.setAttribute('aria-valuenow', String(Math.round(cycle.progress)));
+                const fill = element('div'); fill.style.width = `${cycle.progress}%`; track.append(fill);
+                node.append(track);
+            }
             const bottom = element('div', 'cs-cycle-bottom');
             for (const [label, value] of [['pregnancy', cycle.pregnancy], ['risk', cycle.risk]]) {
                 const status = element('span');
@@ -415,7 +421,7 @@ function card(field, data, compact = false) {
                 status.append(document.createTextNode(`${t(label)}: `), element('strong', 'cs-cycle-status', translated));
                 bottom.append(status);
             }
-            node.append(top, track, bottom); return node;
+            node.append(bottom); return node;
         }
     }
     // Inventory/outfits remain verbatim: comma splitting would corrupt captions.

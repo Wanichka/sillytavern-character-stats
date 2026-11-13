@@ -94,6 +94,8 @@ This example documents the expected data shape; it is not a new required prompt.
 
 Cycles support `Day: X/Y, phase (effects); Pregnancy: X; Risk: X`. Pregnancies support `Week: X+Y/40, phase (effects); Pregnancy: Yes; Risk: None`. Unrecognized formats are shown as text rather than discarded or recalculated. The extension never advances the cycle or story clock itself.
 
+`Day: N/A`, `Day: Not applicable`, and `Day: Не применимо` keep the cycle card and its supplied details without a progress bar.
+
 Meters accept `X/100 (comment)` and `X%/100% (comment)`, with optional comments and decimal scores between 0 and 100. Hangul filler spaces are supported. A real zero remains visible with an empty track. Missing or explicitly cleared values do not produce fabricated zeroes; when no visible meter has data, the whole meter card is omitted. Unrecognized values are preserved as text without a numeric track. Each meter can be hidden independently in settings. No new prompt or model call is required.
 
 ## History and presence

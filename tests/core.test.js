@@ -77,6 +77,18 @@ test('cycle supports menstrual and pregnancy formats without reinterpreting unkn
     assert.equal(cycleDetails('Week: 12+8/40, phase; Pregnancy: Yes; Risk: None'), null);
     assert.equal(cycleDetails('Unknown'), null);
 });
+
+test('not-applicable cycle data keeps its explanation and statuses without a progress value', () => {
+    const raw = '<cycle>\nDay:\u3164Не\u3164применимо,\u3164детский\u3164возраст\u3164(11\u3164лет);\u3164Pregnancy:\u3164No;\u3164Risk:\u3164None\n</cycle>';
+    const { cycle } = parseMessage(user(raw)).user;
+    assert.deepEqual(cycleDetails(cycle), {
+        week: false, count: 'Не применимо', phase: 'детский возраст (11 лет)',
+        pregnancy: 'No', risk: 'None', progress: null,
+    });
+    assert.equal(cycleDetails('Day: N/A; Pregnancy: No; Risk: None').phase, '');
+    assert.equal(cycleDetails('Day: Not applicable, no cycle; Pregnancy: No; Risk: None').progress, null);
+    assert.equal(cycleDetails('Day: Unknown, no cycle data; Pregnancy: No; Risk: None'), null);
+});
 test('chat identity isolates cards, chats and groups; no unbound global state', () => {
     const make = (avatar, id) => ({ characters: [{ avatar }], characterId: 0, chatId: id });
     assert.notEqual(chatKey(make('one.png', 'same')), chatKey(make('two.png', 'same')));

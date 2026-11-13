@@ -134,6 +134,14 @@ try {
     assert.notEqual(await evaluate(`getComputedStyle(document.querySelector('.cs-cycle-phase')).color`), await evaluate(`getComputedStyle(document.querySelector('.cs-cycle-top')).color`));
     assert.equal(await evaluate(`new Set(['date','time','weather'].map(field=>{const style=getComputedStyle(document.querySelector('.cs-'+field+' .cs-value'));return [style.fontFamily,style.fontSize,style.fontWeight,style.color].join('|')})).size`), 1);
     assert.equal(await evaluate(`document.querySelector('.cs-cycle h3').textContent`), 'Статус цикла');
+    const notApplicableCycle = 'Day:ㅤНеㅤприменимо,ㅤдетскийㅤвозрастㅤ(11ㅤлет);ㅤPregnancy:ㅤNo;ㅤRisk:ㅤNone';
+    await evaluate(`window.cycleFixtureMessage=ctx.chat[0].mes;ctx.chat[0].mes=cycleFixtureMessage.replace(/<cycle>[^<]*<\\/cycle>/,'<cycle>'+${JSON.stringify(notApplicableCycle)}+'</cycle>');emit('MESSAGE_EDITED')`);
+    await waitFor(`document.querySelector('.cs-cycle-top strong')?.textContent==='Не применимо'`);
+    assert.equal(await evaluate(`document.querySelector('.cs-cycle-phase').textContent`), 'детский возраст (11 лет)');
+    assert.equal(await evaluate(`!!document.querySelector('.cs-cycle-track')`), false);
+    assert.deepEqual(await evaluate(`[...document.querySelector('.cs-cycle-bottom').children].map(node=>node.textContent)`), ['Беременность: Нет', 'Риск: Нет']);
+    await evaluate(`ctx.chat[0].mes=cycleFixtureMessage;emit('MESSAGE_EDITED')`);
+    await waitFor(`document.querySelector('.cs-cycle-track')?.getAttribute('aria-valuenow')==='29'`);
     assert.equal(await evaluate(`new Set([...document.querySelectorAll('.cs-person-heading h2,.cs-card h3,.cs-value,.cs-picker-trigger')].map(node=>getComputedStyle(node).fontFamily)).size`), 1);
     assert.equal(await evaluate(`!!document.querySelector('.cs-portrait-actions')`), false);
     assert.equal(await evaluate(`document.querySelector('.cs-title-wrap .cs-icon').dataset.icon===document.querySelector('.cs-cycle h3 .cs-icon').dataset.icon`), false);

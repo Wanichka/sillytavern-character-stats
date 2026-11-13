@@ -165,12 +165,23 @@ export function replay(messages, settings = {}, profile = {}, userName = 'User',
 
 export function cycleDetails(value) {
     const text = clean(value);
-    const match = text.match(/^(Day|Week)\s*:\s*(\d+)(?:\+(\d+))?\s*\/\s*(\d+)\s*,\s*([\s\S]*?);\s*Pregnancy\s*:\s*([^;]*);\s*Risk\s*:\s*([\s\S]*)$/i);
+    const match = text.match(/^(Day|Week)\s*:\s*([^,;\n]+?)(?:\s*,\s*([\s\S]*?))?\s*;\s*Pregnancy\s*:\s*([^;]*);\s*Risk\s*:\s*([\s\S]*)$/i);
     if (!match) return null; // Preserve unfamiliar formats as plain text.
-    const current = Number(match[2]), days = Number(match[3] || 0), total = Number(match[4]);
-    const week = match[1].toLowerCase() === 'week';
+    const fields = {
+        week: match[1].toLowerCase() === 'week',
+        phase: clean(match[3]),
+        pregnancy: clean(match[4]),
+        risk: clean(match[5]),
+    };
+    const count = clean(match[2]);
+    if (/^(?:не\s*применимо|not applicable|n\/a)$/i.test(count)) return { ...fields, count, progress: null };
+    const numbers = count.match(/^(\d+)(?:\+(\d+))?\s*\/\s*(\d+)$/);
+    if (!numbers || match[3] === undefined) return null;
+    const [, currentText, daysText = '0', totalText] = numbers;
+    const current = Number(currentText), days = Number(daysText), total = Number(totalText);
+    const { week } = fields;
     if (!total || current > total || (week && days > 6)) return null;
-    return { week, count: `${current}${week ? `+${days}` : ''} / ${total}`, phase: match[5], pregnancy: match[6], risk: match[7], progress: Math.min(100, Math.max(0, (current + (week ? days / 7 : 0)) / total * 100)) };
+    return { ...fields, count: `${current}${week ? `+${days}` : ''} / ${total}`, progress: Math.min(100, Math.max(0, (current + (week ? days / 7 : 0)) / total * 100)) };
 }
 
 export function meterDetails(value) {

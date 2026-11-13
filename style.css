@@ -116,6 +116,7 @@
 #cs-panel .cs-cycle-track { height: 6px; background: var(--cs-hover); border-radius: 6px; overflow: hidden; margin: 9px 0; }
 #cs-panel .cs-cycle-track > div { height: 100%; background: var(--cs-sage); border-radius: inherit; }
 #cs-panel .cs-cycle-bottom { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 13px; }
+#cs-panel .cs-cycle-top + .cs-cycle-bottom { margin-top: 6px; }
 #cs-panel .cs-meter { --cs-meter-color: var(--cs-sage); min-width: 0; }
 #cs-panel .cs-meter-arousal { --cs-meter-color: var(--cs-arousal); }
 #cs-panel .cs-meter-pain { --cs-meter-color: var(--cs-pain); }
